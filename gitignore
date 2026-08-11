@@ -1,0 +1,9 @@
+node_modules/
+.env
+
+# Disk cache — populated at runtime, don't commit
+cache/*.json
+
+# OS noise
+.DS_Store
+Thumbs.db
