@@ -60,6 +60,15 @@ const app = express();
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// Never let browsers cache API responses. Without this, a browser can serve
+// a stale response (including stale CORS headers) for an identical URL even
+// after the server config has changed — exactly the kind of "it's fixed on
+// the server but the browser doesn't know it" confusion this avoids.
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 // ---------------------------------------------------------------------------
 // Health check — Render pings this to confirm the service is up.
 // Also a quick sanity readout for debugging config in production.
