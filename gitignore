@@ -1,5 +1,6 @@
 node_modules/
 .env
+.strava-tokens.json
 
 # Disk cache — populated at runtime, don't commit
 cache/*.json
