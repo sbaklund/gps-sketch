@@ -23,6 +23,7 @@ const path    = require('path');
 const fs      = require('fs');
 
 const terrainRouter = require('./routes/terrain');
+const strava        = require('./routes/strava');
 
 // ---------------------------------------------------------------------------
 // CORS
@@ -85,6 +86,7 @@ app.get('/health', (req, res) => {
     status:          'ok',
     time:            new Date().toISOString(),
     maptilerKeySet:  !!process.env.MAPTILER_KEY,
+    stravaConfigured: !!process.env.STRAVA_CLIENT_ID,
     allowedOrigins:  corsOrigins,
     cachedAreas:     cacheSize,
   });
@@ -95,6 +97,7 @@ app.get('/health', (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.use('/api/terrain', terrainRouter);
+app.use(strava.router); // /auth/login, /auth/callback, /auth/logout, /api/status, /api/activities, /api/streams/:id, /healthz
 
 // 404 catch-all
 app.use((req, res) => {
@@ -113,10 +116,11 @@ app.use((err, req, res, _next) => {
 
 const PORT = parseInt(process.env.PORT ?? '3001', 10);
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`[server] Topo backend listening on port ${PORT}`);
   console.log(`[server] MapTiler key: ${process.env.MAPTILER_KEY ? 'set ✓' : 'not set (openmeteo only)'}`);
   console.log(`[server] CORS origins: ${corsOrigins.join(', ')}`);
   console.log(`[server] Health check: http://localhost:${PORT}/health`);
   console.log(`[server] Terrain API:  http://localhost:${PORT}/api/terrain?lat=39.74&lon=-104.99&zoom=10`);
+  await strava.init();
 });
