@@ -32,3 +32,27 @@ services:
       # During development you can also add http://localhost:8080 here.
       - key: ALLOWED_ORIGINS
         value: https://gps-sketch.onrender.com
+
+      # ---- Strava integration ----
+      # Client ID is public, but still set here manually rather than
+      # committed — one less thing to keep in sync with the dashboard.
+      - key: STRAVA_CLIENT_ID
+        sync: false
+
+      # Client secret — NEVER commit this. Set it in the Render dashboard only.
+      - key: STRAVA_CLIENT_SECRET
+        sync: false
+
+      # Where to send people back to after they sign in with Strava — your
+      # GitHub Pages URL (a different domain than this backend). Without
+      # this, the sign-in flow dumps them on the bare backend instead of
+      # back on the actual site.
+      - key: FRONTEND_URL
+        value: https://sbaklund.github.io/topo-route-art
+
+      # Optional — after your first successful sign-in, the server logs a
+      # STRAVA_REFRESH_TOKEN to the Render Logs tab. Paste it here so the
+      # server reconnects automatically on every redeploy (Render's free
+      # tier wipes the disk-based session on each deploy otherwise).
+      - key: STRAVA_REFRESH_TOKEN
+        sync: false
