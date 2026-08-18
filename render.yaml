@@ -1,58 +1,36 @@
 services:
   - type: web
-    name: topo-backend
+    name: gps-sketch
     runtime: node
-    region: oregon   # change to 'frankfurt' or 'singapore' if your users are elsewhere
+    region: oregon
 
-    # Render runs this once on every deploy to install deps
     buildCommand: npm install
 
-    # Render runs this to start the server
     startCommand: node server.js
 
-    # Free tier is fine for a prototype; upgrade to 'starter' when you go live
     plan: free
-
-    # Keep the free instance alive — free Render services spin down after 15 min
-    # of inactivity and take ~30s to cold-start. Setting this to true sends a
-    # periodic ping to prevent spin-down. Remove once you upgrade to a paid plan.
     autoDeploy: true
 
     envVars:
-      # Render sets PORT automatically — do NOT set it manually here.
-
-      # Your MapTiler API key. Set the actual value in the Render dashboard
-      # under Environment → add variable. Never commit the real key.
+      # MapTiler API key — set the actual value in the Render dashboard.
       - key: MAPTILER_KEY
-        sync: false   # 'sync: false' means Render won't auto-populate it;
-                      # you fill it in manually in the dashboard.
-
-      # Comma-separated list of origins your front end is served from.
-      # Update this to your deployed front-end URL before going live.
-      # During development you can also add http://localhost:8080 here.
-      - key: ALLOWED_ORIGINS
-        value: https://gps-sketch.onrender.com
-
-      # ---- Strava integration ----
-      # Client ID is public, but still set here manually rather than
-      # committed — one less thing to keep in sync with the dashboard.
-      - key: STRAVA_CLIENT_ID
         sync: false
 
-      # Client secret — NEVER commit this. Set it in the Render dashboard only.
+      # Strava OAuth — set these in the Render dashboard, never commit secrets.
+      - key: STRAVA_CLIENT_ID
+        sync: false
       - key: STRAVA_CLIENT_SECRET
         sync: false
 
-      # Where to send people back to after they sign in with Strava — your
-      # GitHub Pages URL (a different domain than this backend). Without
-      # this, the sign-in flow dumps them on the bare backend instead of
-      # back on the actual site.
-      - key: FRONTEND_URL
-        value: https://sbaklund.github.io/topo-route-art
-
-      # Optional — after your first successful sign-in, the server logs a
-      # STRAVA_REFRESH_TOKEN to the Render Logs tab. Paste it here so the
-      # server reconnects automatically on every redeploy (Render's free
-      # tier wipes the disk-based session on each deploy otherwise).
+      # Optional — paste your refresh token here so Strava survives redeploys.
       - key: STRAVA_REFRESH_TOKEN
         sync: false
+
+      # NOT NEEDED in single-service mode (frontend + backend = same origin).
+      # Only set FRONTEND_URL if you're running the frontend separately during dev.
+      # - key: FRONTEND_URL
+      #   value: http://localhost:5500
+
+      # NOT NEEDED — same-origin means no CORS issues. Only set for dev.
+      # - key: ALLOWED_ORIGINS
+      #   value: http://localhost:5500
