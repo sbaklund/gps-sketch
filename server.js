@@ -50,6 +50,13 @@ const corsOptions = {
 
 const app = express();
 
+// Render (and most hosts) run behind a reverse proxy that terminates HTTPS and
+// forwards plain HTTP internally. Without this, Express thinks the connection is
+// insecure and express-session refuses to set `secure` cookies — so the Strava
+// session never persists and login silently fails. This tells Express to trust
+// the proxy's X-Forwarded-Proto header.
+app.set('trust proxy', 1);
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
@@ -62,6 +69,10 @@ app.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 
 const SESSION_TTL_MS = parseInt(process.env.SESSION_TTL_MS || '', 10) || 6 * 60 * 60 * 1000; // 6 h
 
+// Render doesn't set NODE_ENV=production by default, so detect deployment via
+// Render's own env var (also honour NODE_ENV if it happens to be set).
+const IS_PROD = !!process.env.RENDER_EXTERNAL_URL || process.env.NODE_ENV === 'production';
+
 app.use(session({
   secret:            process.env.SESSION_SECRET || 'gpx-sketch-dev-secret-change-in-production',
   resave:            false,
@@ -69,9 +80,11 @@ app.use(session({
   cookie: {
     maxAge:   SESSION_TTL_MS,
     httpOnly: true,
-    // secure:true in production (HTTPS); dev stays false so localhost works
-    secure:   process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    // In production (HTTPS behind Render's proxy) cookies must be secure +
+    // sameSite:'none' so they survive the Strava OAuth round-trip. Locally we
+    // relax both so plain-HTTP localhost still works.
+    secure:   IS_PROD,
+    sameSite: IS_PROD ? 'none' : 'lax',
   },
 }));
 
