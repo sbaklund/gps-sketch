@@ -4,29 +4,21 @@
  * routes/strava.js
  *
  * Strava OAuth + activity proxy for GPX Sketch.
+ * PER-USER SESSIONS: each visitor gets their own Strava connection via
+ * express-session cookies. No shared global token — person A's Strava
+ * never leaks to person B.
  *
  * Endpoints:
  *   GET  /auth/login        → redirects to Strava's sign-in page
  *   GET  /auth/callback     → Strava redirects here after sign-in
- *   GET  /auth/logout       → clears the session
- *   GET  /api/status        → { connected, athlete }
- *   GET  /api/activities    → paginated activity list with GPS
+ *   GET  /auth/logout       → clears THIS user's session
+ *   GET  /api/status        → { connected, athlete } for THIS user
+ *   GET  /api/activities    → paginated activity list for THIS user
  *   GET  /api/streams/:id   → full-resolution lat/lon points for one activity
  *   GET  /healthz           → { ok, mode }
- *
- * SINGLE-SERVICE architecture: the same server serves both the frontend and
- * this API, so /auth/callback redirects back to '/' (same origin). No
- * FRONTEND_URL needed in production. Set FRONTEND_URL only if you're running
- * the frontend from a different origin during development.
- *
- * Strava's app settings ("Authorization Callback Domain") must be set to
- * this server's domain (e.g. gps-sketch.onrender.com).
  */
 
 const express = require('express');
-const path    = require('path');
-const fs      = require('fs');
-
 const router = express.Router();
 
 // ---------------------------------------------------------------------------
@@ -37,79 +29,16 @@ const CLIENT_ID     = process.env.STRAVA_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET || '';
 const MOCK          = process.env.STRAVA_MOCK === '1';
 
-// BASE_URL = this server's public URL (used for redirect_uri in OAuth)
 const BASE_URL =
   process.env.BASE_URL ||
   process.env.RENDER_EXTERNAL_URL ||
   (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null) ||
   'http://localhost:3001';
 
-// Where users land after sign-in. Same origin in production (single service).
-// Only override this if your frontend is on a different domain during dev.
 const FRONTEND_URL = process.env.FRONTEND_URL || BASE_URL;
 
 // ---------------------------------------------------------------------------
-// Token persistence
-// ---------------------------------------------------------------------------
-
-let tokens = null; // { access_token, refresh_token, expires_at, athlete }
-
-const TOKEN_FILE = process.env.TOKEN_FILE || path.join(__dirname, '..', '.strava-tokens.json');
-
-function saveTokens() {
-  try {
-    if (tokens) fs.writeFileSync(TOKEN_FILE, JSON.stringify(tokens), { mode: 0o600 });
-    else if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
-  } catch (e) {
-    console.warn('[strava] could not persist token store:', e.message);
-  }
-}
-
-function loadTokens() {
-  try {
-    if (fs.existsSync(TOKEN_FILE)) {
-      tokens = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf8'));
-      console.log('[strava] restored session from', TOKEN_FILE);
-      return true;
-    }
-  } catch (e) {
-    console.warn('[strava] could not read token store:', e.message);
-  }
-  return false;
-}
-
-async function bootstrapFromEnv() {
-  const rt = process.env.STRAVA_REFRESH_TOKEN;
-  if (tokens || !rt || MOCK) return;
-  if (!CLIENT_SECRET) {
-    console.warn('[strava] STRAVA_REFRESH_TOKEN set but STRAVA_CLIENT_SECRET is missing — cannot bootstrap');
-    return;
-  }
-  try {
-    const res = await fetch('https://www.strava.com/oauth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: 'refresh_token',
-        refresh_token: rt,
-      }),
-    });
-    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-    tokens = await res.json();
-    tokens.athlete = await stravaGet('https://www.strava.com/api/v3/athlete');
-    saveTokens();
-    console.log('[strava] session bootstrapped from STRAVA_REFRESH_TOKEN —',
-      (tokens.athlete && tokens.athlete.firstname) || 'connected');
-  } catch (e) {
-    console.warn('[strava] STRAVA_REFRESH_TOKEN bootstrap failed:', e.message);
-    tokens = null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Strava API helpers
+// Strava API helpers (accept tokens as parameter, not global)
 // ---------------------------------------------------------------------------
 
 async function exchangeCode(code) {
@@ -127,9 +56,9 @@ async function exchangeCode(code) {
   return res.json();
 }
 
-async function refreshIfNeeded() {
+async function refreshIfNeeded(tokens) {
   if (!tokens) throw new Error('Not connected');
-  if (tokens.expires_at * 1000 > Date.now() + 60_000) return;
+  if (tokens.expires_at * 1000 > Date.now() + 60_000) return tokens;
   const res = await fetch('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -142,16 +71,15 @@ async function refreshIfNeeded() {
   });
   if (!res.ok) throw new Error(`Token refresh failed: ${res.status}`);
   const t = await res.json();
-  tokens = { ...tokens, ...t };
-  saveTokens();
+  return { ...tokens, ...t };
 }
 
-async function stravaGet(url) {
-  await refreshIfNeeded();
+async function stravaGet(url, tokens) {
+  tokens = await refreshIfNeeded(tokens);
   const res = await fetch(url, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
   if (res.status === 429) throw new Error('Strava rate limit reached — try again in ~15 minutes');
   if (!res.ok) throw new Error(`Strava API ${res.status}: ${await res.text()}`);
-  return res.json();
+  return { data: await res.json(), tokens };
 }
 
 // ---------------------------------------------------------------------------
@@ -175,21 +103,6 @@ function decodePolyline(str) {
     points.push([lng / 1e5, lat / 1e5]);
   }
   return points;
-}
-
-// ---------------------------------------------------------------------------
-// Connection-state helper
-// ---------------------------------------------------------------------------
-
-let warnedNotConnected = false;
-function notConnected(req, res) {
-  if (!warnedNotConnected) {
-    warnedNotConnected = true;
-    console.warn(`[strava] 401 on ${req.path} — no Strava token held.`);
-    console.warn('[strava] if you were connected a moment ago, this process restarted.');
-    console.warn('[strava] set STRAVA_REFRESH_TOKEN to reconnect automatically on boot.');
-  }
-  res.status(401).json({ error: 'Not connected', code: 'NOT_CONNECTED' });
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +137,7 @@ function toCard(a) {
 // Mock data (STRAVA_MOCK=1)
 // ---------------------------------------------------------------------------
 
-const MOCK_ATHLETE = { id: 1, firstname: 'Stephen', lastname: 'B.', city: 'Boulder', state: 'Colorado', profile: null };
+const MOCK_ATHLETE = { id: 1, firstname: 'Demo', lastname: 'User', city: 'Boulder', state: 'Colorado', profile: null };
 function mockActivities() {
   const mk = (i, name, type) => {
     const pts = [];
@@ -238,11 +151,22 @@ function mockActivities() {
 }
 
 // ---------------------------------------------------------------------------
+// Session helpers — read/write tokens from req.session
+// ---------------------------------------------------------------------------
+
+function getTokens(req) { return req.session && req.session.stravaTokens || null; }
+function setTokens(req, t) { if (req.session) req.session.stravaTokens = t; }
+function clearTokens(req) { if (req.session) delete req.session.stravaTokens; }
+
+// ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
 
 router.get('/auth/login', (req, res) => {
-  if (MOCK) { tokens = { mock: true, athlete: MOCK_ATHLETE, expires_at: 9e9 }; return res.redirect(FRONTEND_URL + '?strava=connected'); }
+  if (MOCK) {
+    setTokens(req, { mock: true, athlete: MOCK_ATHLETE, expires_at: 9e9 });
+    return res.redirect(FRONTEND_URL + '?strava=connected');
+  }
   if (!CLIENT_ID) return res.status(500).send('STRAVA_CLIENT_ID not configured on the server');
   const url = 'https://www.strava.com/oauth/authorize'
     + `?client_id=${CLIENT_ID}`
@@ -257,22 +181,22 @@ router.get('/auth/callback', async (req, res) => {
   try {
     if (req.query.error) return res.redirect(FRONTEND_URL + '?strava_error=' + encodeURIComponent(req.query.error));
     const data = await exchangeCode(req.query.code);
-    tokens = data;
-    saveTokens();
-    if (tokens.refresh_token) {
-      console.log('[strava] connected. To survive redeploys on an ephemeral disk, set:');
-      console.log('         STRAVA_REFRESH_TOKEN=' + tokens.refresh_token);
-    }
+    setTokens(req, data);
+    console.log('[strava] user connected:', (data.athlete && data.athlete.firstname) || 'unknown');
     res.redirect(FRONTEND_URL + '?strava=connected');
   } catch (e) {
-    console.error(e);
+    console.error('[strava] callback error:', e.message);
     res.redirect(FRONTEND_URL + '?strava_error=' + encodeURIComponent(e.message));
   }
 });
 
-router.get('/auth/logout', (req, res) => { tokens = null; saveTokens(); res.json({ ok: true }); });
+router.get('/auth/logout', (req, res) => {
+  clearTokens(req);
+  res.json({ ok: true });
+});
 
 router.get('/api/status', (req, res) => {
+  const tokens = getTokens(req);
   if (!tokens) return res.json({ connected: false });
   const a = tokens.athlete || {};
   res.json({
@@ -288,61 +212,63 @@ router.get('/api/status', (req, res) => {
 
 router.get('/api/activities', async (req, res) => {
   try {
-    if (!tokens) return notConnected(req, res);
+    let tokens = getTokens(req);
+    if (!tokens) return res.status(401).json({ error: 'Not connected', code: 'NOT_CONNECTED' });
     if (MOCK) {
       return res.json({
         activities: mockActivities().map(a => ({ ...a, thumbPoints: a.points })),
-        hiddenCount: 1,
-        nextPage: 2,
-        hasMore: false,
+        hiddenCount: 1, nextPage: 2, hasMore: false,
       });
     }
 
-    const PER_PAGE = 30;
-    const TARGET = 15;
-    const MAX_PAGES_PER_REQUEST = 5;
-
+    const PER_PAGE = 30, TARGET = 15, MAX_PAGES = 5;
     let page = Math.max(1, parseInt(req.query.page || '1', 10));
     const activities = [];
-    let hiddenCount = 0;
-    let scanned = 0;
-    let reachedEnd = false;
+    let hiddenCount = 0, scanned = 0, reachedEnd = false;
 
-    while (activities.length < TARGET && scanned < MAX_PAGES_PER_REQUEST) {
-      const raw = await stravaGet(
-        `https://www.strava.com/api/v3/athlete/activities?per_page=${PER_PAGE}&page=${page}`
+    while (activities.length < TARGET && scanned < MAX_PAGES) {
+      const result = await stravaGet(
+        `https://www.strava.com/api/v3/athlete/activities?per_page=${PER_PAGE}&page=${page}`,
+        tokens
       );
-      scanned++;
-      page++;
+      tokens = result.tokens; // may have been refreshed
+      const raw = result.data;
+      scanned++; page++;
 
       if (!Array.isArray(raw) || raw.length === 0) { reachedEnd = true; break; }
-
       const withGps = raw.filter(a => a.map && a.map.summary_polyline);
       hiddenCount += raw.length - withGps.length;
       for (const a of withGps) activities.push(toCard(a));
-
       if (raw.length < PER_PAGE) { reachedEnd = true; break; }
     }
 
+    // Persist any refreshed tokens back to session
+    setTokens(req, tokens);
     res.json({ activities, hiddenCount, nextPage: page, hasMore: !reachedEnd });
   } catch (e) {
-    console.error(e);
+    console.error('[strava] activities error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
 router.get('/api/streams/:id', async (req, res) => {
   try {
-    if (!tokens) return notConnected(req, res);
+    let tokens = getTokens(req);
+    if (!tokens) return res.status(401).json({ error: 'Not connected', code: 'NOT_CONNECTED' });
     if (MOCK) {
       const act = mockActivities().find(a => String(a.id) === req.params.id);
       return act ? res.json({ points: act.points }) : res.status(404).json({ error: 'not found' });
     }
-    const data = await stravaGet(`https://www.strava.com/api/v3/activities/${req.params.id}/streams?keys=latlng&key_by_type=true`);
-    if (!data.latlng || !data.latlng.data) return res.status(404).json({ error: 'No GPS stream for this activity' });
-    res.json({ points: data.latlng.data.map(p => [p[1], p[0]]) });
+    const result = await stravaGet(
+      `https://www.strava.com/api/v3/activities/${req.params.id}/streams?keys=latlng&key_by_type=true`,
+      tokens
+    );
+    tokens = result.tokens;
+    setTokens(req, tokens);
+    if (!result.data.latlng || !result.data.latlng.data) return res.status(404).json({ error: 'No GPS stream' });
+    res.json({ points: result.data.latlng.data.map(p => [p[1], p[0]]) });
   } catch (e) {
-    console.error(e);
+    console.error('[strava] streams error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -350,15 +276,13 @@ router.get('/api/streams/:id', async (req, res) => {
 router.get('/healthz', (req, res) => res.json({ ok: true, mode: MOCK ? 'mock' : (CLIENT_ID ? 'strava' : 'unconfigured') }));
 
 // ---------------------------------------------------------------------------
-// Startup — restore any existing session so a restart doesn't silently
-// 401 forever. Call once from server.js after the app starts listening.
+// Init — no global token bootstrap needed (per-user sessions handle it)
 // ---------------------------------------------------------------------------
 
 async function init() {
-  if (MOCK) { console.log('[strava] MOCK mode — no real Strava credentials needed'); return; }
-  loadTokens();
-  await bootstrapFromEnv();
-  if (!tokens) console.log('[strava] no stored session — connect via the app to sign in');
+  if (MOCK) { console.log('[strava] MOCK mode'); return; }
+  if (!CLIENT_ID) console.warn('[strava] STRAVA_CLIENT_ID not set — Strava features disabled');
+  else console.log('[strava] per-user session mode — each visitor signs in independently');
 }
 
 module.exports = { router, init };
