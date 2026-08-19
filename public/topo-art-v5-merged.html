@@ -111,20 +111,22 @@
   #abstractShell{ visibility:hidden; pointer-events:none; }
   body[data-app="abstract"] #shell{ visibility:hidden; pointer-events:none; }
   body[data-app="abstract"] #abstractShell{ visibility:visible; pointer-events:auto; }
-  /* during transition, both shells visible, neither interactive */
+  /* during transition, both shells MUST stay visible — !important beats data-app rules */
   body[data-transitioning] #shell,
-  body[data-transitioning] #abstractShell{ visibility:visible; pointer-events:none; }
+  body[data-transitioning] #abstractShell{ visibility:visible !important; pointer-events:none !important; }
 
   /* ---------- tab-switch cascade ----------
      Model: pieces float OFF, then (once the stage is empty) the incoming
      tab's pieces float IN. Rest position = no cx-off-* class (transform:none).
      .cx-static parks a piece off-screen with NO animation so we can later
      release it into a real transition. */
-  :root{ --cx-dur:.42s; --cx-ease:cubic-bezier(.36,0,.12,1); }
+  :root{ --cx-out:.44s; --cx-in:.38s; --cx-ease:cubic-bezier(.36,0,.12,1); }
   #rail, #stage,
   #controls-bar, #left-panel, #canvas-wrapper, #colorDockWrap{
-    transition:transform var(--cx-dur) var(--cx-ease), opacity var(--cx-dur) var(--cx-ease);
+    transition:transform var(--cx-out) var(--cx-ease), opacity var(--cx-out) var(--cx-ease);
   }
+  /* entering pieces use the snappier duration */
+  .cx-entering{ transition-duration:var(--cx-in) !important; }
   /* only pay for a compositor layer while actually transitioning */
   body[data-transitioning] #rail, body[data-transitioning] #stage,
   body[data-transitioning] #controls-bar, body[data-transitioning] #left-panel,
@@ -1512,30 +1514,23 @@
     <div class="group" id="routeGroup">
       <div class="label">Route</div>
       <label class="toggle"><input type="checkbox" id="showRoute" checked><span>Show route line</span></label>
+      <div class="field" style="margin-top:8px;">
+        <label for="gpxInput" class="btn" style="display:block; text-align:center; font-size:11px;">⬆ Upload GPX file</label>
+        <input type="file" id="gpxInput" accept=".gpx,.xml" style="display:none;">
+        <div id="gpxName" class="note"></div>
+      </div>
+      <div id="envNote"></div>
+      <div id="loadMsg" class="note"></div>
+      <button class="btn" id="stravaBtn2" style="display:none;"></button>
+      <button class="btn" id="retryElev" style="display:none;">Retry elevation</button>
+      <button class="btn" id="testSrc" style="display:none;">Test source</button>
     </div>
 
     <div class="group">
       <div class="label">Legend</div>
       <div class="field"><label for="title">Title</label><input type="text" id="title" value=""></div>
       <div class="field"><label for="subtitle">Subtitle</label><input type="text" id="subtitle" value=""></div>
-      <p class="note">Stats below the title are computed automatically.</p>
-    </div>
-
-    <div class="group" id="routeGroup">
-      <div class="label">Your Route</div>
-      <div id="envNote"></div>
-      <div class="field">
-        <label for="gpxInput" class="btn primary" style="display:block; text-align:center;">⬆ Upload GPX</label>
-        <input type="file" id="gpxInput" accept=".gpx,.xml" style="display:none;">
-        <div id="gpxName" class="note"></div>
-      </div>
-      <button class="btn" id="stravaBtn2" style="display:none;"></button>
-      <p class="note">Your route draws immediately. Elevation loads automatically.</p>
-      <div class="btns" style="margin-top:10px;">
-        <button class="btn" id="retryElev" style="flex:1;">Retry elevation</button>
-        <button class="btn" id="testSrc" style="flex:1;">Test source</button>
-      </div>
-      <div id="loadMsg" class="note"></div>
+      <p class="note">Auto-filled from Strava. Edit anytime.</p>
     </div>
 
     <div class="group">
@@ -16977,11 +16972,12 @@ function setApp(mode){ const topo=mode==='topo';
                       canvas-wrapper↦right, colorDockWrap↧down
    Theme + tabs flip at t=0 (the empty beat already shows the new skin);
    incoming pieces are staggered so they reassemble, not snap.
-   CX_DUR must match --cx-dur in the CSS. */
-const CX_DUR   = 420;                        // per-piece motion (ms) — matches --cx-dur
-const CX_GAP   = 120;                        // visible empty-stage beat between out and in
-const CX_STAG  = 140;                        // max incoming stagger (matches .cx-d3)
-const CX_TOTAL = CX_DUR + CX_GAP + CX_DUR + CX_STAG + 60; // full cycle + buffer
+   CX_DUR must match --cx-out in the CSS. */
+const CX_OUT   = 440;                        // exit motion (ms) — matches --cx-out
+const CX_IN    = 380;                        // enter motion (ms) — matches --cx-in
+const CX_GAP   = 80;                         // empty-stage beat between out and in
+const CX_STAG  = 180;                        // max incoming stagger (matches .cx-d3)
+const CX_TOTAL = CX_OUT + CX_GAP + CX_IN + CX_STAG + 60; // full cycle + buffer
 let currentApp = 'topo';
 let cxAnimating = false;
 
@@ -17027,19 +17023,19 @@ function switchApp(mode){
   // ── PHASE 2: stage is empty → float the INCOMING pieces in ──
   setTimeout(()=>{
     // 1) re-enable transitions on the parked pieces (still off-screen)…
-    inPieces.forEach(el=>{ if(el) el.classList.remove('cx-static'); });
+    inPieces.forEach(el=>{ if(el){ el.classList.remove('cx-static'); el.classList.add('cx-entering'); } });
     void document.body.offsetWidth;             // commit "transition on, still off-screen"
     // 2) …then release them toward rest — now it actually animates.
     inPieces.forEach((el,i)=>{ if(!el) return;
       if(inStagger[i]) el.classList.add(inStagger[i]);
       el.classList.remove(cxOff(el.id));
     });
-  }, CX_DUR + CX_GAP);
+  }, CX_OUT + CX_GAP);
 
   // ── CLEANUP: strip every cascade class, drop the transition flag ──
   setTimeout(()=>{
     [...topoPieces, ...absPieces].forEach(el=>{
-      if(el) el.classList.remove('cx-static', ...CX_ALL_OFF, ...CX_ALL_D);
+      if(el) el.classList.remove('cx-static', 'cx-entering', ...CX_ALL_OFF, ...CX_ALL_D);
     });
     delete document.body.dataset.transitioning;
     cxAnimating = false;
@@ -20005,7 +20001,7 @@ render(); pushHist(); updateHistUI();
                 return;
             }
             showStravaView('loading');
-            try{ localStorage.setItem('gpxsketch_tab', currentApp); }catch(e){}
+            try{ localStorage.setItem('gpxsketch_tab', document.body.dataset.app || 'abstract'); }catch(e){}
             window.location.href = `${window.BACKEND_URL}/auth/login`;
         }
 
