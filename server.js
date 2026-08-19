@@ -3,6 +3,11 @@
 console.log('[boot] server.js loading…');
 console.log('[boot] Node version:', process.version);
 
+// BUILD version — must match window.__BUILD__.html in the frontend.
+// Bumped on every code export so /health can confirm the deploy is current.
+const BUILD = 'v0.11.0';
+console.log('[boot] build', BUILD);
+
 /**
  * server.js — GPX Sketch (single-service architecture)
  *
@@ -125,6 +130,7 @@ app.get('/health', (req, res) => {
 
   res.json({
     status:           'ok',
+    build:            BUILD,
     time:             new Date().toISOString(),
     maptilerKeySet:   !!process.env.MAPTILER_KEY,
     stravaConfigured: !!process.env.STRAVA_CLIENT_ID,
