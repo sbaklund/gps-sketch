@@ -15,12 +15,13 @@ console.log('[boot] Node version:', process.version);
 
 try { require('dotenv').config(); } catch(e) { console.warn('[boot] dotenv not found, skipping:', e.message); }
 
-let express, cors;
+let express, cors, session;
 try {
   express = require('express');
   cors    = require('cors');
-  console.log('[boot] express + cors loaded ✓');
-} catch(e) { console.error('[boot] FATAL: cannot load express/cors:', e.message); process.exit(1); }
+  session = require('express-session');
+  console.log('[boot] express + cors + express-session loaded ✓');
+} catch(e) { console.error('[boot] FATAL: cannot load express/cors/session:', e.message); process.exit(1); }
 
 const path    = require('path');
 const fs      = require('fs');
@@ -64,8 +65,27 @@ const corsOptions = {
 
 const app = express();
 
+// Render terminates SSL at the load balancer — trust the proxy so secure
+// cookies work (otherwise the browser won't send them over HTTPS).
+app.set('trust proxy', 1);
+
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// Per-user sessions — each visitor gets their own cookie + Strava token store.
+// On Render's free tier, MemoryStore resets on redeploy (users re-authenticate).
+const SESSION_SECRET = process.env.SESSION_SECRET || 'gpxsketch-' + Math.random().toString(36).slice(2);
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,     // don't create sessions until Strava login
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,  // 1 week
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production' || !!process.env.RENDER,
+  },
+}));
 
 // No-cache for API responses (static files use their own caching below)
 app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
