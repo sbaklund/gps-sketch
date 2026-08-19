@@ -16633,11 +16633,16 @@ function makeFrame(la,lo,z){ const wx=lon2tileX(lo,z)*256, wy=lat2tileY(la,z)*25
  return {data:null,w:R_W,h:R_H,minFt:0,maxFt:1,kind:'route',left:wx-R_W/2,top:wy-R_H/2,zoom:z,lat:la,lon:lo,hasElev:false}; }
 
 /* ---------- backend terrain fetch ---------- */
-// BACKEND_URL: empty in production (same-origin, single service).
-// During local dev with a separate frontend, point to the backend port.
+// BACKEND_URL: set to your deployed Render URL in production.
+// During local dev, run the backend on port 3001 and this just works.
 const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3001'
-  : '';    // same origin — no cross-domain needed
+  : 'https://topo-backend-6jb7.onrender.com';
+// Abstract's script runs in its own isolated IIFE and can't see this local
+// const — its Strava calls (originally written assuming same-origin
+// front-end + backend, since that's how it used to be deployed) need this
+// on window instead, now that front end (GitHub Pages) and backend (Render)
+// are different origins.
 window.BACKEND_URL = BACKEND_URL;
 
 async function fetchTerrain(frame, source) {
