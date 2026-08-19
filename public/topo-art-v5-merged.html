@@ -107,47 +107,39 @@
   #shell, #abstractShell{
     position:absolute; inset:0; display:flex; overflow:hidden;
   }
-  /* inactive shell hidden, no pointer events */
-  #abstractShell{ visibility:hidden; pointer-events:none; }
-  body[data-app="abstract"] #shell{ visibility:hidden; pointer-events:none; }
-  body[data-app="abstract"] #abstractShell{ visibility:visible; pointer-events:auto; }
-  /* during transition, both shells MUST stay visible — !important beats data-app rules */
-  body[data-transitioning] #shell,
-  body[data-transitioning] #abstractShell{ visibility:visible !important; pointer-events:none !important; }
 
-  /* ---------- tab-switch cascade ----------
-     Model: pieces float OFF, then (once the stage is empty) the incoming
-     tab's pieces float IN. Rest position = no cx-off-* class (transform:none).
-     .cx-static parks a piece off-screen with NO animation so we can later
-     release it into a real transition. */
-  :root{ --cx-out:.44s; --cx-in:.38s; --cx-ease:cubic-bezier(.36,0,.12,1); }
-  #rail, #stage,
-  #controls-bar, #left-panel, #canvas-wrapper, #colorDockWrap{
-    transition:transform var(--cx-out) var(--cx-ease), opacity var(--cx-out) var(--cx-ease);
-  }
-  /* entering pieces use the snappier duration */
-  .cx-entering{ transition-duration:var(--cx-in) !important; }
-  /* only pay for a compositor layer while actually transitioning */
-  body[data-transitioning] #rail, body[data-transitioning] #stage,
-  body[data-transitioning] #controls-bar, body[data-transitioning] #left-panel,
-  body[data-transitioning] #canvas-wrapper, body[data-transitioning] #colorDockWrap{
+  /* ---------- tab-switch transition (whole-shell crossfade + slide) ----------
+     Each shell animates as ONE layer — no per-piece reflow, no flash.
+     Resting: active shell visible & interactive, inactive fully hidden.
+     During a switch, JS drives .cx-* classes on both shells. */
+  :root{ --cx-dur:.5s; --cx-ease:cubic-bezier(.4,0,.15,1); }
+
+  /* default (no transition running): show active shell, hide the other */
+  #abstractShell{ opacity:0; visibility:hidden; pointer-events:none; }
+  #shell{ opacity:1; visibility:visible; pointer-events:auto; }
+  body[data-app="abstract"] #abstractShell{ opacity:1; visibility:visible; pointer-events:auto; }
+  body[data-app="abstract"] #shell{ opacity:0; visibility:hidden; pointer-events:none; }
+
+  /* while transitioning, BOTH shells are painted; JS controls opacity/transform */
+  body[data-transitioning] #shell,
+  body[data-transitioning] #abstractShell{
+    visibility:visible !important; pointer-events:none !important;
+    transition:transform var(--cx-dur) var(--cx-ease), opacity var(--cx-dur) var(--cx-ease);
     will-change:transform,opacity;
   }
-  /* incoming stagger (applied to the entering pieces only) */
-  .cx-d1{ transition-delay:.06s; }
-  .cx-d2{ transition-delay:.12s; }
-  .cx-d3{ transition-delay:.18s; }
-  /* snap with NO animation — parks incoming pieces before their entrance */
-  .cx-static{ transition:none !important; transition-delay:0s !important; }
-  /* off-screen resting positions (used both to exit and to park before entry) */
-  .cx-off-left { transform:translateX(-118%); opacity:0; }
-  .cx-off-right{ transform:translateX(118%);  opacity:0; }
-  .cx-off-up   { transform:translateY(-125%); opacity:0; }
-  .cx-off-down { transform:translateY(125%);  opacity:0; }
+  /* leaving shell: fade + drift out */
+  body[data-transitioning] .cx-leave{ opacity:0 !important; transform:translateY(-18px) scale(.985); }
+  /* entering shell parked below, invisible, NO animation (so it can't flash) */
+  body[data-transitioning] .cx-enter-park{
+    opacity:0 !important; transform:translateY(22px) scale(.99);
+    transition:none !important;
+  }
+  /* entering shell released to rest — this frame actually animates */
+  body[data-transitioning] .cx-enter-active{ opacity:1 !important; transform:none; }
+
   @media (prefers-reduced-motion:reduce){
-    #rail,#stage,#controls-bar,#left-panel,#canvas-wrapper,#colorDockWrap{
-      transition:none !important;
-    }
+    body[data-transitioning] #shell,
+    body[data-transitioning] #abstractShell{ transition:none !important; }
   }
   .rail{ width:var(--sidebar-w); flex:0 0 var(--sidebar-w); background:var(--rail); color:var(--text);
     padding:16px 14px 34px; overflow-y:auto; border-right:1px solid var(--rail-line);
@@ -1463,7 +1455,6 @@
         <span id="stravaBtnLabel">Connect to Strava</span>
       </button>
       <img id="stravaBtnAvatar" style="display:none; width:22px; height:22px; border-radius:50%; margin-right:4px;">
-      <div id="stravaList" style="display:none; margin-top:8px; max-height:280px; overflow-y:auto; border:1px solid var(--card-line); border-radius:var(--r-md); background:var(--card-inset);"></div>
     </div>
 
     <div class="group">
@@ -1781,7 +1772,7 @@
                 </div>
                 <div class="dash-filter-note" id="dashFilterNote"></div>
                 <div class="dash-list" id="dashList"></div>
-                <div class="dash-footer">
+                <div class="dash-footer" id="dashFooter">
                     <span class="dash-count" id="dashCount">0 selected</span>
                     <button class="dash-selectall" id="dashSelectAll">Select all</button>
                     <button class="strava-btn" id="stravaImportButton" disabled>Add to canvas</button>
@@ -16964,32 +16955,16 @@ function setApp(mode){ const topo=mode==='topo';
  document.getElementById('tabTopo').setAttribute('aria-selected',topo);
  document.getElementById('tabAbstract').setAttribute('aria-selected',!topo);
  document.getElementById('histBar').style.visibility=topo?'visible':'hidden'; }
-/* ---------- tab-switch transition (sequential ~730ms) ----------
-   The layout flies apart, the stage sits empty for a beat, then the
-   incoming tab's pieces float back in from the same edges:
-     Topo pieces:     rail↤left, stage↦right
-     Abstract pieces: controls-bar↥up, left-panel↤left,
-                      canvas-wrapper↦right, colorDockWrap↧down
-   Theme + tabs flip at t=0 (the empty beat already shows the new skin);
-   incoming pieces are staggered so they reassemble, not snap.
-   CX_DUR must match --cx-out in the CSS. */
-const CX_OUT   = 440;                        // exit motion (ms) — matches --cx-out
-const CX_IN    = 380;                        // enter motion (ms) — matches --cx-in
-const CX_GAP   = 80;                         // empty-stage beat between out and in
-const CX_STAG  = 180;                        // max incoming stagger (matches .cx-d3)
-const CX_TOTAL = CX_OUT + CX_GAP + CX_IN + CX_STAG + 60; // full cycle + buffer
+/* ---------- tab-switch transition (whole-shell crossfade + slide) ----------
+   Two shells, two layers. The leaving shell fades + drifts up and out; the
+   entering shell is parked just below (invisible, no transition) then released
+   to its resting position on the next frame so it fades + rises in. They
+   overlap slightly for a smooth crossfade — no flash, no per-piece reflow.
+   CX_DUR must match --cx-dur in the CSS. */
+const CX_DUR   = 500;                 // matches --cx-dur (ms)
+const CX_TOTAL = CX_DUR + 60;         // full cycle + small buffer
 let currentApp = 'topo';
 let cxAnimating = false;
-
-/* Each piece exits (and re-enters) from a fixed edge, so the motion reads
-   as the layout flying apart and reassembling from the same directions. */
-const CX_DIR = {
-  'rail':'left', 'stage':'right',
-  'controls-bar':'up', 'left-panel':'left', 'canvas-wrapper':'right', 'colorDockWrap':'down'
-};
-const cxOff = id => 'cx-off-' + CX_DIR[id];
-const CX_ALL_OFF = ['cx-off-left','cx-off-right','cx-off-up','cx-off-down'];
-const CX_ALL_D   = ['cx-d1','cx-d2','cx-d3'];
 
 function switchApp(mode){
   if(mode===currentApp || cxAnimating) return;
@@ -17000,43 +16975,35 @@ function switchApp(mode){
   const prevApp = currentApp;
   currentApp = mode;
 
-  const topoPieces = ['rail','stage'].map(id=>document.getElementById(id));
-  const absPieces  = ['controls-bar','left-panel','canvas-wrapper','colorDockWrap'].map(id=>document.getElementById(id));
-  const outPieces  = prevApp==='topo' ? topoPieces : absPieces;
-  const inPieces   = prevApp==='topo' ? absPieces  : topoPieces;
-  // stagger for the entering pieces (index-aligned to inPieces)
-  const inStagger  = prevApp==='topo' ? ['', 'cx-d1', 'cx-d2', 'cx-d3'] : ['', 'cx-d1'];
+  const leaving  = document.getElementById(prevApp==='topo' ? 'shell' : 'abstractShell');
+  const entering = document.getElementById(mode==='topo'    ? 'shell' : 'abstractShell');
 
-  // Keep BOTH shells visible & inert for the whole cycle; flip theme + tabs now.
+  // Enter transition mode: both shells painted, neither interactive.
   document.body.dataset.transitioning = '1';
+
+  // Park the entering shell (invisible, below, NO transition) and mark the
+  // leaving shell so it can animate out.
+  entering.classList.add('cx-enter-park');
+  leaving.classList.add('cx-leave-prep');   // currently at rest, still visible
+  void document.body.offsetWidth;            // commit both states
+
+  // Flip theme + tabs now — the leaving shell fades over the new skin.
   setApp(mode);
 
-  // ── Park the incoming pieces off-screen with NO animation ──
-  inPieces.forEach(el=>{ if(el) el.classList.add('cx-static', cxOff(el.id)); });
-  void document.body.offsetWidth;               // commit parked state
-
-  // ── PHASE 1: float the OUTGOING pieces off-screen ──
   requestAnimationFrame(()=>{
-    outPieces.forEach(el=>{ if(el) el.classList.add(cxOff(el.id)); });
+    // Leaving shell animates out; entering shell releases from its parked
+    // position and animates in — the two crossfade.
+    leaving.classList.remove('cx-leave-prep');
+    leaving.classList.add('cx-leave');
+    entering.classList.remove('cx-enter-park');
+    // second rAF guarantees the parked (no-transition) state was painted
+    requestAnimationFrame(()=>{ entering.classList.add('cx-enter-active'); });
   });
 
-  // ── PHASE 2: stage is empty → float the INCOMING pieces in ──
+  // Cleanup: strip classes, exit transition mode.
   setTimeout(()=>{
-    // 1) re-enable transitions on the parked pieces (still off-screen)…
-    inPieces.forEach(el=>{ if(el){ el.classList.remove('cx-static'); el.classList.add('cx-entering'); } });
-    void document.body.offsetWidth;             // commit "transition on, still off-screen"
-    // 2) …then release them toward rest — now it actually animates.
-    inPieces.forEach((el,i)=>{ if(!el) return;
-      if(inStagger[i]) el.classList.add(inStagger[i]);
-      el.classList.remove(cxOff(el.id));
-    });
-  }, CX_OUT + CX_GAP);
-
-  // ── CLEANUP: strip every cascade class, drop the transition flag ──
-  setTimeout(()=>{
-    [...topoPieces, ...absPieces].forEach(el=>{
-      if(el) el.classList.remove('cx-static', 'cx-entering', ...CX_ALL_OFF, ...CX_ALL_D);
-    });
+    leaving.classList.remove('cx-leave','cx-leave-prep');
+    entering.classList.remove('cx-enter-park','cx-enter-active');
     delete document.body.dataset.transitioning;
     cxAnimating = false;
   }, CX_TOTAL);
@@ -17145,34 +17112,16 @@ function setStravaUI(connected, name, profile){
  } else {
   label.textContent='Connect to Strava';
   avatar.style.display='none';
-  document.getElementById('stravaList').style.display='none';
  } }
+window._setTopoStravaUI = setStravaUI;
 async function checkStravaStatus(){
  try{
   const res=await fetch(`${BACKEND_URL}/api/status`, { cache:'no-store' });
   if(!res.ok) return;
   const s=await res.json();
-  if(s.connected){
-   setStravaUI(true, s.athlete.firstname, s.athlete.profile);
-   // Don't auto-open the list — user clicks the Strava button to browse routes
-  } else { setStravaUI(false); }
+  if(s.connected){ setStravaUI(true, s.athlete.firstname, s.athlete.profile); }
+  else { setStravaUI(false); }
  }catch(e){ console.warn('[topo] checkStravaStatus failed:', e.message, 'URL was:', BACKEND_URL+'/api/status'); } }
-async function loadStravaActivities(){
- const list=document.getElementById('stravaList');
- list.style.display='block'; list.innerHTML='<div class="actRow" style="padding:12px;color:var(--text-dim);">Loading activities…</div>';
- try{
-  const res=await fetch(`${BACKEND_URL}/api/activities`, { cache:'no-store' });
-  if(!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data=await res.json();
-  if(!data.activities || !data.activities.length){ list.innerHTML='<div class="actRow" style="padding:12px;color:var(--text-dim);">No activities with GPS found.</div>'; return; }
-  list.innerHTML='';
-  data.activities.forEach(a=>{
-   const row=document.createElement('div'); row.className='actRow';
-   row.innerHTML=`<span class="actName">${a.name}</span><span class="actMeta">${a.date} · ${a.dist} · +${a.elev}</span>
-    <button class="btn primary" style="margin-top:6px; padding:6px 12px; font-size:11px; width:100%;">Generate Map</button>`;
-   row.querySelector('button').onclick=(e)=>{ e.stopPropagation(); loadStravaActivity(a.id,a.name); };
-   list.appendChild(row); });
- }catch(err){ list.innerHTML=`<div class="actRow" style="padding:12px;color:var(--text-dim);">Could not load: ${err.message}</div>`; } }
 async function loadStravaActivity(id,name){
  msg('','Loading route…');
  try{
@@ -17189,6 +17138,7 @@ async function loadStravaActivity(id,name){
   reverseGeocode(fr.centerLat, fr.centerLon);
   await loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom);
  }catch(err){ msg('warn','Could not load Strava route: '+err.message); } }
+window._loadTopoStravaRoute = loadStravaActivity;
 // Smart subtitle: reverse geocode the route center to "City, ST" or park name
 async function reverseGeocode(lat, lon){
  const sub=document.getElementById('subtitle');
@@ -17227,10 +17177,8 @@ function usStateAbbr(name){
  return m[name]||''; }
 document.getElementById('stravaBtn').onclick=async()=>{
  if(stravaConnected){
-  // Toggle the activity list open/closed
-  const list=document.getElementById('stravaList');
-  if(list.style.display==='none'||!list.style.display){ loadStravaActivities(); }
-  else { list.style.display='none'; }
+  // Open the same popup Abstract uses, in single-select "topo" mode
+  if(window._openStravaOverlay) window._openStravaOverlay('topo');
   return; }
  try{ localStorage.setItem('gpxsketch_tab', currentApp); }catch(e){}
  window.location.href = `${BACKEND_URL}/auth/login`; };
@@ -19974,7 +19922,15 @@ render(); pushHist(); updateHistUI();
             stravaWindow.classList.toggle('wide', name === 'dash');
         }
 
-        function openStravaOverlay() {
+        // Shared overlay: 'abstract' = multi-select + Add to canvas,
+        // 'topo' = single-select, loads straight onto the Topo canvas.
+        let stravaOverlayMode = 'abstract';
+        function openStravaOverlay(mode) {
+            stravaOverlayMode = (mode === 'topo') ? 'topo' : 'abstract';
+            // Footer (multi-select + import) only makes sense in Abstract mode
+            const footer = document.getElementById('dashFooter');
+            if (footer) footer.style.display = stravaOverlayMode === 'topo' ? 'none' : 'flex';
+            selectedActivityIds.clear();
             stravaOverlay.classList.add('open');
             if (stravaConnected && stravaReal) {
                 showStravaView('loading');
@@ -19985,6 +19941,7 @@ render(); pushHist(); updateHistUI();
             stravaConnectNote.style.display = stravaReal ? 'none' : 'block';
             showStravaView('connect');
         }
+        window._openStravaOverlay = openStravaOverlay;
         function closeStravaOverlay() {
             stravaOverlay.classList.remove('open');
         }
@@ -20025,6 +19982,9 @@ render(); pushHist(); updateHistUI();
             stravaConnectButton.classList.remove('connected');
             stravaConnectButton.querySelector('.strava-mark').style.display = '';
             stravaConnectLabel.textContent = 'Connect with Strava';
+            // Keep the Topo sidebar button in sync (shared connection)
+            if (window._setTopoStravaUI) window._setTopoStravaUI(false);
+            if (stravaOverlayMode === 'topo') { closeStravaOverlay(); return; }
             showStravaView('connect');
         });
 
@@ -20100,7 +20060,13 @@ render(); pushHist(); updateHistUI();
 
                 if (selectedActivityIds.has(a.id)) card.classList.add('selected');
 
-                card.addEventListener('click', () => {
+                card.addEventListener('click', async () => {
+                    if (stravaOverlayMode === 'topo') {
+                        // Single-select: load straight onto the Topo canvas and close
+                        closeStravaOverlay();
+                        if (window._loadTopoStravaRoute) await window._loadTopoStravaRoute(a.id, a.name);
+                        return;
+                    }
                     if (selectedActivityIds.has(a.id)) {
                         selectedActivityIds.delete(a.id);
                         card.classList.remove('selected');
