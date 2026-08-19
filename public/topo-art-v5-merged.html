@@ -7,14 +7,17 @@
 <meta name="description" content="Turn your Strava routes and GPX files into abstract art — or a topographic map poster of the real terrain.">
 <meta property="og:type"        content="website">
 <meta property="og:site_name"   content="GPX Sketch">
-<meta property="og:url"         content="https://gps-sketch.onrender.com/">
+<meta property="og:url"         content="https://topo-backend-6jb7.onrender.com/">
 <meta property="og:title"       content="GPX Sketch — turn your routes into art">
 <meta property="og:description" content="Turn your Strava routes and GPX files into abstract art, or a topographic poster of the real terrain.">
-<meta property="og:image"       content="https://gps-sketch.onrender.com/og-image.jpg">
-<meta property="og:image:type"  content="image/jpeg">
-<meta property="og:image:width"  content="1200">
-<meta property="og:image:height" content="630">
+<meta property="og:image"       content="https://topo-backend-6jb7.onrender.com/og-preview.png">
+<meta property="og:image:type"  content="image/png">
+<meta property="og:image:width"  content="1280">
+<meta property="og:image:height" content="640">
 <meta property="og:image:alt"   content="GPX Sketch — abstract shapes and topographic posters generated from GPS routes">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="GPX Sketch — turn your routes into art">
+<meta name="twitter:image" content="https://topo-backend-6jb7.onrender.com/og-preview.png">
 <meta name="twitter:card"        content="summary_large_image">
 <meta name="twitter:title"       content="GPX Sketch — turn your routes into art">
 <meta name="twitter:description" content="Turn your Strava routes and GPX files into abstract art, or a topographic poster of the real terrain.">
@@ -38,6 +41,7 @@
     --gap:8px; --sec-gap:24px; --ctrl-h:38px;
     --body:'Inter',system-ui,sans-serif;
     --display:'Bricolage Grotesque','Inter',sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
     --ls-label:.18em;
   }
 
@@ -116,7 +120,7 @@
      tab's pieces float IN. Rest position = no cx-off-* class (transform:none).
      .cx-static parks a piece off-screen with NO animation so we can later
      release it into a real transition. */
-  :root{ --cx-dur:.30s; --cx-ease:cubic-bezier(.33,0,.2,1); }
+  :root{ --cx-dur:.42s; --cx-ease:cubic-bezier(.36,0,.12,1); }
   #rail, #stage,
   #controls-bar, #left-panel, #canvas-wrapper, #colorDockWrap{
     transition:transform var(--cx-dur) var(--cx-ease), opacity var(--cx-dur) var(--cx-ease);
@@ -128,9 +132,9 @@
     will-change:transform,opacity;
   }
   /* incoming stagger (applied to the entering pieces only) */
-  .cx-d1{ transition-delay:.05s; }
-  .cx-d2{ transition-delay:.09s; }
-  .cx-d3{ transition-delay:.13s; }
+  .cx-d1{ transition-delay:.06s; }
+  .cx-d2{ transition-delay:.12s; }
+  .cx-d3{ transition-delay:.18s; }
   /* snap with NO animation — parks incoming pieces before their entrance */
   .cx-static{ transition:none !important; transition-delay:0s !important; }
   /* off-screen resting positions (used both to exit and to park before entry) */
@@ -150,7 +154,7 @@
   /* ---------- floating cards (sibling to Abstract's .panel-section) ---------- */
   .group{ margin-bottom:0; background:var(--card); border:1px solid var(--card-line);
     border-radius:var(--r-lg); padding:14px 15px; box-shadow:var(--card-shadow); }
-  .group > .label{ font-size:var(--fs-label); letter-spacing:var(--ls-label); text-transform:uppercase; color:var(--text-dim); display:flex; align-items:center; gap:var(--gap); margin-bottom:12px; font-weight:600; }
+  .group > .label{ font-size:var(--fs-label); letter-spacing:var(--ls-label); text-transform:uppercase; color:var(--text-dim); display:flex; align-items:center; gap:var(--gap); margin-bottom:12px; font-family:var(--mono); font-weight:500; }
   .group > .label::after{ content:""; flex:1; height:1px; background:var(--card-line); }
   /* nested controls drop to the inset tone so they read as sunken in the card */
   .group .preset, .group .cswatch, .group #pickerWrap,
@@ -177,7 +181,7 @@
   .seg button{ flex:1; background:transparent; color:var(--text-dim); border:0; padding:9px 4px; cursor:pointer; font-family:var(--body); font-size:12px; font-weight:500; }
   .seg button + button{ border-left:1px solid var(--rail-line); } .seg button[aria-pressed="true"]{ background:var(--accent); color:#fff; }
   .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
-  .row label{ font-size:var(--fs-body); color:var(--text); } .row .val{ font-size:11.5px; color:var(--accent); font-weight:600; }
+  .row label{ font-size:var(--fs-body); color:var(--text); } .row .val{ font-size:11.5px; color:var(--accent); font-family:var(--mono); font-weight:500; }
   input[type=range]{ width:100%; accent-color:var(--accent); cursor:pointer; }
   .field{ margin-bottom:12px; }
   .field label{ display:block; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); margin-bottom:5px; font-weight:600; }
@@ -188,7 +192,7 @@
   .btns{ display:flex; gap:var(--gap); }
   .btn{ flex:1; cursor:pointer; border-radius:var(--r-md); padding:10px; font-family:var(--body); font-size:12px; font-weight:500; border:1px solid var(--rail-line); background:var(--rail-2); color:var(--text); transition:border-color .15s; }
   .btn:hover{ border-color:var(--accent-dim); } .btn.primary{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; } .btn:disabled{ opacity:.5; cursor:progress; } .btn:active{ transform:scale(.98); }
-  .note{ font-size:var(--fs-note); line-height:1.5; color:var(--text-dim); margin-top:6px; } .note.warn{ color:#e6a15b; } .note.ok{ color:#7fb58a; }
+  .note{ font-size:var(--fs-note); line-height:1.5; color:var(--text-dim); margin-top:6px; font-family:var(--mono); } .note.warn{ color:#e6a15b; } .note.ok{ color:#7fb58a; }
   .banner{ font-size:var(--fs-note); line-height:1.5; color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); border:1px solid var(--accent-dim); border-radius:var(--r-md); padding:8px 10px; margin-bottom:12px; }
   details summary{ cursor:pointer; list-style:none; } details summary::-webkit-details-marker{ display:none; }
 
@@ -219,7 +223,7 @@
     background:transparent; border:0; border-radius:var(--r-sm); color:#fff; }
   #histBar button:hover:not(:disabled){ background:rgba(255,255,255,.15); }
   #histBar button:disabled{ opacity:.35; cursor:default; }
-  #histBar button span{ font-family:var(--body); font-size:9px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; line-height:1; }
+  #histBar button span{ font-family:var(--mono); font-size:9px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; line-height:1; }
   #histBar svg{ width:16px; height:16px; }
   #histBar .sep{ width:1px; background:rgba(255,255,255,.25); margin:6px 2px; }
 
@@ -1450,6 +1454,16 @@
   <div id="shell">
   <aside class="rail" id="rail">
 
+    <div class="group" id="stravaGroup">
+      <div class="label">Strava</div>
+      <button class="btn" id="stravaBtn" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="opacity:.7"><path d="M10.5 1L6.5 9.5h2.8L10.5 7l1.2 2.5h2.8L10.5 1zM5.5 9.5L3 4.5 0.5 9.5h2.1l.4-.8.4.8h2.1z"/></svg>
+        <span id="stravaBtnLabel">Connect to Strava</span>
+      </button>
+      <img id="stravaBtnAvatar" style="display:none; width:22px; height:22px; border-radius:50%; margin-right:4px;">
+      <div id="stravaList" style="display:none; margin-top:8px; max-height:280px; overflow-y:auto; border:1px solid var(--card-line); border-radius:var(--r-md); background:var(--card-inset);"></div>
+    </div>
+
     <div class="group">
       <div class="label">Themes</div>
       <div id="signaturePane" class="presets"></div>
@@ -1515,9 +1529,7 @@
         <input type="file" id="gpxInput" accept=".gpx,.xml" style="display:none;">
         <div id="gpxName" class="note"></div>
       </div>
-      <button class="btn" id="stravaBtn" style="width:100%; margin-top:8px;">Connect to Strava</button>
-      <button class="btn" id="stravaDiag" style="width:100%; margin-top:4px; font-size:10px; opacity:.7;">🔍 Diagnose Strava</button>
-      <div id="stravaList" style="display:none; margin-top:8px; max-height:220px; overflow-y:auto; border:1px solid var(--rail-line); border-radius:var(--r-sm);"></div>
+      <button class="btn" id="stravaBtn2" style="display:none;"></button>
       <p class="note">Your route draws immediately. Elevation loads automatically.</p>
       <div class="btns" style="margin-top:10px;">
         <button class="btn" id="retryElev" style="flex:1;">Retry elevation</button>
@@ -1700,6 +1712,32 @@
     <div id="debugPanel">
         <div class="dbg-title"><span>debug log &middot; toggle: Ctrl/Cmd+D</span><button class="dbg-close" id="debugCloseButton">&times;</button></div>
         <div id="debugLog"></div>
+
+        <!-- Abstract undo/redo floating bar (mirrors Topo's #histBar) -->
+        <div id="absHistBar" role="group" aria-label="Undo and redo"
+             style="position:fixed; right:22px; bottom:22px; z-index:60; display:none; gap:2px; padding:6px 8px;
+                    background:rgba(0,0,0,.72); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+                    border-radius:12px; border:1px solid rgba(255,255,255,.12);">
+          <button id="absUndoBtn" disabled title="Undo" style="width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:transparent;border:none;border-radius:8px;color:#fff;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h8a3 3 0 010 6H8"/><path d="M5 5L3 8l2 3"/></svg>
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;line-height:1;">Undo</span>
+          </button>
+          <div style="width:1px;background:rgba(255,255,255,.25);margin:6px 2px;"></div>
+          <button id="absRedoBtn" disabled title="Redo" style="width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:transparent;border:none;border-radius:8px;color:#fff;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 8H5a3 3 0 000 6h3"/><path d="M11 5l2 3-2 3"/></svg>
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;line-height:1;">Redo</span>
+          </button>
+        </div>
+        <script>
+          document.getElementById('absUndoBtn').onclick=()=>{ if(window._absUndo) window._absUndo(); };
+          document.getElementById('absRedoBtn').onclick=()=>{ if(window._absRedo) window._absRedo(); };
+          // Show/hide based on active tab
+          const _absBar=document.getElementById('absHistBar');
+          new MutationObserver(()=>{
+            const isAbs=document.body.dataset.app==='abstract';
+            if(_absBar && _absBar.classList.contains('on')) _absBar.style.display=isAbs?'flex':'none';
+          }).observe(document.body, {attributes:true, attributeFilter:['data-app']});
+        </script>
     </div>
 
     <!-- ================= STRAVA CONNECT (real OAuth) ================= -->
@@ -16633,16 +16671,11 @@ function makeFrame(la,lo,z){ const wx=lon2tileX(lo,z)*256, wy=lat2tileY(la,z)*25
  return {data:null,w:R_W,h:R_H,minFt:0,maxFt:1,kind:'route',left:wx-R_W/2,top:wy-R_H/2,zoom:z,lat:la,lon:lo,hasElev:false}; }
 
 /* ---------- backend terrain fetch ---------- */
-// BACKEND_URL: set to your deployed Render URL in production.
-// During local dev, run the backend on port 3001 and this just works.
+// BACKEND_URL: empty in production (same-origin, single service).
+// During local dev with a separate frontend, point to the backend port.
 const BACKEND_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3001'
-  : 'https://topo-backend-6jb7.onrender.com';
-// Abstract's script runs in its own isolated IIFE and can't see this local
-// const — its Strava calls (originally written assuming same-origin
-// front-end + backend, since that's how it used to be deployed) need this
-// on window instead, now that front end (GitHub Pages) and backend (Render)
-// are different origins.
+  : '';    // same origin — no cross-domain needed
 window.BACKEND_URL = BACKEND_URL;
 
 async function fetchTerrain(frame, source) {
@@ -16945,10 +16978,10 @@ function setApp(mode){ const topo=mode==='topo';
    Theme + tabs flip at t=0 (the empty beat already shows the new skin);
    incoming pieces are staggered so they reassemble, not snap.
    CX_DUR must match --cx-dur in the CSS. */
-const CX_DUR   = 300;                        // per-piece motion (ms) — matches --cx-dur
-const CX_GAP   = 40;                          // empty-stage beat between out and in
-const CX_STAG  = 130;                         // max incoming stagger (matches .cx-d3)
-const CX_TOTAL = CX_DUR + CX_GAP + CX_DUR + CX_STAG + 40; // full cycle + buffer
+const CX_DUR   = 420;                        // per-piece motion (ms) — matches --cx-dur
+const CX_GAP   = 120;                        // visible empty-stage beat between out and in
+const CX_STAG  = 140;                        // max incoming stagger (matches .cx-d3)
+const CX_TOTAL = CX_DUR + CX_GAP + CX_DUR + CX_STAG + 60; // full cycle + buffer
 let currentApp = 'topo';
 let cxAnimating = false;
 
@@ -17014,6 +17047,17 @@ function switchApp(mode){
 }
 document.getElementById('tabTopo').onclick=()=>switchApp('topo');
 document.getElementById('tabAbstract').onclick=()=>switchApp('abstract');
+
+// Restore the tab the user was on before Strava OAuth redirect
+(function restoreTab(){
+ try{
+  const saved = localStorage.getItem('gpxsketch_tab');
+  if(saved && saved !== currentApp){
+   localStorage.removeItem('gpxsketch_tab');
+   setApp(saved); currentApp = saved;
+  }
+ }catch(e){}
+})();
 /* ---------- controls ---------- */
 function syncMode(){ document.querySelectorAll('#mode button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.mode===state.mode)); }
 document.querySelectorAll('#mode button').forEach(b=>{ b.onclick=()=>{ state.mode=b.dataset.mode; if(state.preset) state.preset.mode=state.mode;
@@ -17092,34 +17136,47 @@ document.getElementById('retryElev').onclick=async()=>{
  await tryLoadTerrain(); };
 /* ---------- Strava connect ---------- */
 let stravaConnected=false;
-function setStravaUI(connected,name){
+function setStravaUI(connected, name, profile){
  stravaConnected=connected;
- const b=document.getElementById('stravaBtn');
- b.textContent = connected ? `Disconnect Strava (${name||'connected'})` : 'Connect to Strava';
- if(!connected) document.getElementById('stravaList').style.display='none'; }
+ const label=document.getElementById('stravaBtnLabel');
+ const avatar=document.getElementById('stravaBtnAvatar');
+ const btn=document.getElementById('stravaBtn');
+ if(connected){
+  label.textContent = name || 'Connected';
+  if(profile){ avatar.src=profile; avatar.style.display='inline'; btn.insertBefore(avatar, btn.firstChild); }
+  else { avatar.style.display='none'; }
+  btn.style.justifyContent='center';
+ } else {
+  label.textContent='Connect to Strava';
+  avatar.style.display='none';
+  document.getElementById('stravaList').style.display='none';
+ } }
 async function checkStravaStatus(){
  try{
   const res=await fetch(`${BACKEND_URL}/api/status`, { cache:'no-store' });
   if(!res.ok) return;
   const s=await res.json();
-  setStravaUI(!!s.connected, s.athlete && s.athlete.firstname);
-  if(s.connected) loadStravaActivities();
- }catch(e){ /* backend unreachable — leave button in default state, no error noise */ } }
+  if(s.connected){
+   setStravaUI(true, s.athlete.firstname, s.athlete.profile);
+   loadStravaActivities();
+  } else { setStravaUI(false); }
+ }catch(e){ console.warn('[topo] checkStravaStatus failed:', e.message, 'URL was:', BACKEND_URL+'/api/status'); } }
 async function loadStravaActivities(){
  const list=document.getElementById('stravaList');
- list.style.display='block'; list.innerHTML='<div class="actRow">Loading activities…</div>';
+ list.style.display='block'; list.innerHTML='<div class="actRow" style="padding:12px;color:var(--text-dim);">Loading activities…</div>';
  try{
   const res=await fetch(`${BACKEND_URL}/api/activities`, { cache:'no-store' });
   if(!res.ok) throw new Error(`HTTP ${res.status}`);
   const data=await res.json();
-  if(!data.activities || !data.activities.length){ list.innerHTML='<div class="actRow">No activities with GPS found.</div>'; return; }
+  if(!data.activities || !data.activities.length){ list.innerHTML='<div class="actRow" style="padding:12px;color:var(--text-dim);">No activities with GPS found.</div>'; return; }
   list.innerHTML='';
   data.activities.forEach(a=>{
    const row=document.createElement('div'); row.className='actRow';
-   row.innerHTML=`<span class="actName">${a.name}</span><span class="actMeta">${a.date} · ${a.dist} · +${a.elev}</span>`;
-   row.onclick=()=>loadStravaActivity(a.id,a.name);
+   row.innerHTML=`<span class="actName">${a.name}</span><span class="actMeta">${a.date} · ${a.dist} · +${a.elev}</span>
+    <button class="btn primary" style="margin-top:6px; padding:6px 12px; font-size:11px; width:100%;">Generate Map</button>`;
+   row.querySelector('button').onclick=(e)=>{ e.stopPropagation(); loadStravaActivity(a.id,a.name); };
    list.appendChild(row); });
- }catch(err){ list.innerHTML=`<div class="actRow">Could not load activities: ${err.message}</div>`; } }
+ }catch(err){ list.innerHTML=`<div class="actRow" style="padding:12px;color:var(--text-dim);">Could not load: ${err.message}</div>`; } }
 async function loadStravaActivity(id,name){
  msg('','Loading route…');
  try{
@@ -17130,13 +17187,56 @@ async function loadStravaActivity(id,name){
   rawGpx=points.map(p=>({lat:p[1],lon:p[0],ele:null})); gpxBbox=bboxOf(rawGpx); gpxHasEle=false;
   document.getElementById('gpxName').textContent=`${name} · ${rawGpx.length.toLocaleString()} pts (from Strava)`;
   const fr=frameFromBbox(gpxBbox,0.18);
-  const t0=document.getElementById('title'); if(!t0.value.trim()){ t0.value=name.toUpperCase(); document.getElementById('subtitle').value='Strava Route'; }
+  // Auto-fill title + smart subtitle
+  const t0=document.getElementById('title');
+  if(!t0.value.trim()) t0.value=name.toUpperCase();
+  reverseGeocode(fr.centerLat, fr.centerLon);
   await loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom);
  }catch(err){ msg('warn','Could not load Strava route: '+err.message); } }
+// Smart subtitle: reverse geocode the route center to "City, ST" or park name
+async function reverseGeocode(lat, lon){
+ const sub=document.getElementById('subtitle');
+ if(sub.value.trim() && sub.value!=='Strava Route' && sub.value!=='GPX Route') return; // user already typed something
+ try{
+  const res=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=12`, {
+   headers:{'Accept-Language':'en'} });
+  if(!res.ok) throw new Error('geocode failed');
+  const g=await res.json();
+  const a=g.address||{};
+  // Prefer park/forest/nature reserve name if present
+  const park = a.national_park || a.park || a.nature_reserve || a.protected_area || '';
+  if(park){ sub.value=park; return; }
+  // Otherwise: City, STATE_CODE
+  const city = a.city || a.town || a.village || a.hamlet || a.county || '';
+  const state = a.state || '';
+  // US state abbreviation lookup
+  const stateAbbr = usStateAbbr(state) || state;
+  if(city && stateAbbr) sub.value = `${city}, ${stateAbbr}`;
+  else if(city) sub.value = city;
+  else if(a.county && stateAbbr) sub.value = `${a.county}, ${stateAbbr}`;
+  else sub.value = state || g.display_name?.split(',').slice(0,2).join(',') || 'Strava Route';
+ }catch(e){ sub.value='Strava Route'; }
+}
+function usStateAbbr(name){
+ const m={'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
+  'Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA',
+  'Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA','Kansas':'KS',
+  'Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD','Massachusetts':'MA',
+  'Michigan':'MI','Minnesota':'MN','Mississippi':'MS','Missouri':'MO','Montana':'MT',
+  'Nebraska':'NE','Nevada':'NV','New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM',
+  'New York':'NY','North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK',
+  'Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC',
+  'South Dakota':'SD','Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT',
+  'Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY'};
+ return m[name]||''; }
 document.getElementById('stravaBtn').onclick=async()=>{
  if(stravaConnected){
-  try{ await fetch(`${BACKEND_URL}/auth/logout`, { cache:'no-store' }); }catch(e){}
-  setStravaUI(false); msg('','Disconnected from Strava.'); return; }
+  // Toggle the activity list open/closed
+  const list=document.getElementById('stravaList');
+  if(list.style.display==='none'||!list.style.display){ loadStravaActivities(); }
+  else { list.style.display='none'; }
+  return; }
+ try{ localStorage.setItem('gpxsketch_tab', currentApp); }catch(e){}
  window.location.href = `${BACKEND_URL}/auth/login`; };
 /* Coming back from Strava's sign-in redirect lands here with a query param
    on THIS page (the front end), not the backend. Abstract's own script reads
@@ -17170,63 +17270,14 @@ document.getElementById('testSrc').onclick=async()=>{
  }catch(err){
   msg('warn',`Backend not reachable (${err.message}). Make sure the server is running.\nTried: ${BACKEND_URL}`);
  } };
-document.getElementById('stravaDiag').onclick=async()=>{
- msg('','Running Strava diagnostic…');
- const lines=[];
- lines.push(`BACKEND_URL (from HTML): ${BACKEND_URL}`);
- lines.push(`Frontend origin: ${window.location.origin}`);
- // 1. Health check
- try{
-  const h=await(await fetch(`${BACKEND_URL}/health`,{cache:'no-store'})).json();
-  lines.push(`Backend reachable: ✓`);
-  lines.push(`Strava configured: ${h.stravaConfigured?'✓':'✗ (no STRAVA_CLIENT_ID)'}`);
-  lines.push(`CORS allowed origins: ${(h.allowedOrigins||[]).join(', ')}`);
-  if(!(h.allowedOrigins||[]).includes(window.location.origin)) lines.push(`⚠ THIS SITE (${window.location.origin}) is NOT in allowed origins!`);
- }catch(e){ lines.push(`Backend unreachable: ${e.message}`); msg('warn',lines.join('\n')); return; }
- // 2. Strava status
- try{
-  const sr=await fetch(`${BACKEND_URL}/api/status`,{cache:'no-store'});
-  const ss=await sr.json();
-  lines.push(`Strava connected: ${ss.connected?'✓ ('+ss.athlete.firstname+')':'✗'}`);
- }catch(e){ lines.push(`Strava status check failed: ${e.message}`); }
- // 3. Probe /auth/login to get the redirect URL Strava sees
- //    (fetch with redirect:manual so we don't actually navigate)
- try{
-  const lr=await fetch(`${BACKEND_URL}/auth/login`,{redirect:'manual',cache:'no-store'});
-  if(lr.type==='opaqueredirect' || lr.status===302 || lr.status===301){
-   // Can't read Location header on opaque redirect due to CORS, but we can note it worked
-   lines.push(`/auth/login responded with redirect (expected)`);
-   lines.push(`The redirect_uri sent to Strava = <BASE_URL>/auth/callback`);
-   lines.push(`BASE_URL = RENDER_EXTERNAL_URL on the server`);
-   lines.push(`\n⚡ TO FIX: Go to https://www.strava.com/settings/api`);
-   lines.push(`Set "Authorization Callback Domain" to the BACKEND domain:`);
-   lines.push(`  → topo-backend-6jb7.onrender.com (no https://, no path)`);
-   lines.push(`\nAlso in Render dashboard → topo-backend → Environment:`);
-   lines.push(`  FRONTEND_URL = ${window.location.origin}`);
-  } else if(lr.status===500){
-   const body=await lr.text().catch(()=>'');
-   lines.push(`/auth/login returned 500: ${body}`);
-   lines.push(`⚠ STRAVA_CLIENT_ID is probably not set on the server.`);
-  } else {
-   lines.push(`/auth/login returned HTTP ${lr.status}`);
-  }
- }catch(e){
-  lines.push(`/auth/login probe failed: ${e.message}`);
-  lines.push(`(This is expected if CORS blocks cross-origin redirect probes)`);
-  lines.push(`\n⚡ TO FIX: Go to https://www.strava.com/settings/api`);
-  lines.push(`Set "Authorization Callback Domain" to the BACKEND domain.`);
-  lines.push(`Also in Render dashboard → topo-backend → Environment:`);
-  lines.push(`  FRONTEND_URL = ${window.location.origin}`);
- }
- msg('ok',lines.join('\n'));
-};
 document.getElementById('gpxInput').onchange=async e=>{
  const f=e.target.files[0]; if(!f) return; msg('','Reading GPX…');
  try{ const text=await f.text(); const pts=parseGpx(text);
   rawGpx=pts; gpxBbox=bboxOf(pts); gpxHasEle=pts.some(p=>p.ele!=null);
   document.getElementById('gpxName').textContent=`${f.name} · ${pts.length.toLocaleString()} pts${gpxHasEle?' · has elevation':''}`;
   const fr=frameFromBbox(gpxBbox,0.18);
-  const t0=document.getElementById('title'); if(!t0.value.trim()){ t0.value=f.name.replace(/\.(gpx|xml)$/i,'').replace(/[_-]/g,' ').toUpperCase(); document.getElementById('subtitle').value='GPX Route'; }
+  const t0=document.getElementById('title'); if(!t0.value.trim()){ t0.value=f.name.replace(/\.(gpx|xml)$/i,'').replace(/[_-]/g,' ').toUpperCase(); }
+  reverseGeocode(fr.centerLat, fr.centerLon);
   await loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom);
  }catch(err){ msg('warn','Could not read GPX: '+err.message); } };
 function download(name,blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
@@ -18213,6 +18264,7 @@ render(); pushHist(); updateHistUI();
             historyStack.push(snap);
             if (historyStack.length > HISTORY_MAX) historyStack.shift();
             historyIndex = historyStack.length - 1;
+            if(window._updateAbsHistBar) window._updateAbsHistBar();
         };
         let pushHistoryDebounced = function () {
             clearTimeout(historyDebounceTimer);
@@ -18264,6 +18316,7 @@ render(); pushHist(); updateHistUI();
                 historyIndex--;
                 restoreHistory(historyStack[historyIndex]);
                 dbg(`undo -> state ${historyIndex + 1}/${historyStack.length}`);
+                updateAbsHistBar();
             }
         }
         function redo() {
@@ -18271,8 +18324,20 @@ render(); pushHist(); updateHistUI();
                 historyIndex++;
                 restoreHistory(historyStack[historyIndex]);
                 dbg(`redo -> state ${historyIndex + 1}/${historyStack.length}`);
+                updateAbsHistBar();
             }
         }
+        // Expose for the floating undo bar
+        window._absUndo = undo;
+        window._absRedo = redo;
+        function updateAbsHistBar(){
+         const u=document.getElementById('absUndoBtn'), r=document.getElementById('absRedoBtn');
+         if(u) u.disabled = historyIndex <= 0;
+         if(r) r.disabled = historyIndex >= historyStack.length - 1;
+         const bar=document.getElementById('absHistBar');
+         if(bar) bar.classList.toggle('on', historyStack.length > 1);
+        }
+        window._updateAbsHistBar = updateAbsHistBar;
         // Keyboard: Cmd/Ctrl+Z = undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y = redo.
         // Ignored while typing in a field so it never hijacks text input.
         document.addEventListener('keydown', (e) => {
@@ -19693,8 +19758,10 @@ render(); pushHist(); updateHistUI();
         let dashServerExhausted = false;
         async function detectRealStrava() {
             try {
+                dbg('detectRealStrava: fetching ' + window.BACKEND_URL + '/api/status');
                 const res = await fetch(`${window.BACKEND_URL}/api/status`);
-                if (!res.ok) return;
+                dbg('detectRealStrava: response status ' + res.status);
+                if (!res.ok) { dbg('detectRealStrava: non-200, aborting'); return; }
                 const status = await res.json();
                 stravaReal = true;
                 dbg('real Strava backend detected' + (status.connected ? ` — connected as ${status.athlete.firstname}` : ' (not connected yet)'));
@@ -19710,7 +19777,7 @@ render(); pushHist(); updateHistUI();
                     document.querySelector('#stravaViewDash .dash-loc').textContent = status.athlete.location || '';
                     if (status.athlete.profile) document.getElementById('dashAvatarImg').src = status.athlete.profile;
                 }
-            } catch (e) { /* no backend detected — real Strava requires the server */ }
+            } catch (e) { dbg('detectRealStrava failed: ' + e.message, true); }
         }
 
         // A 401 from our own backend means the server is holding no Strava
@@ -19938,6 +20005,7 @@ render(); pushHist(); updateHistUI();
                 return;
             }
             showStravaView('loading');
+            try{ localStorage.setItem('gpxsketch_tab', currentApp); }catch(e){}
             window.location.href = `${window.BACKEND_URL}/auth/login`;
         }
 
