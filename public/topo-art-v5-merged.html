@@ -17154,7 +17154,7 @@ async function checkStravaStatus(){
   const s=await res.json();
   if(s.connected){
    setStravaUI(true, s.athlete.firstname, s.athlete.profile);
-   loadStravaActivities();
+   // Don't auto-open the list — user clicks the Strava button to browse routes
   } else { setStravaUI(false); }
  }catch(e){ console.warn('[topo] checkStravaStatus failed:', e.message, 'URL was:', BACKEND_URL+'/api/status'); } }
 async function loadStravaActivities(){
