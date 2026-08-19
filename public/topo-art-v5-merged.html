@@ -224,11 +224,7 @@
   #stage{ flex:1; display:flex; align-items:center; justify-content:center; padding:var(--stage-pad); overflow:auto; }
   #poster-shell{ filter:drop-shadow(0 18px 40px rgba(20,30,35,.28)); transition:opacity .25s ease; width:min(560px, 74vh * .75, 90%); position:relative; }
   #poster{ width:100%; height:auto; display:block; border-radius:2px; }
-  #stravaList .actRow{ display:flex; flex-direction:column; gap:2px; padding:8px 10px; cursor:pointer; border-bottom:1px solid var(--rail-line); font-size:12px; }
-  #stravaList .actRow:last-child{ border-bottom:none; }
-  #stravaList .actRow:hover{ background:var(--rail-2); }
-  #stravaList .actName{ font-weight:600; color:var(--text); }
-  #stravaList .actMeta{ color:var(--text-dim); font-size:11px; }
+  /* (Topo Strava now uses the shared popup overlay, not a sidebar list) */
   #busy{ position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px;
     background:rgba(20,30,35,.45); border-radius:2px; color:#fff; } #busy.on{ display:flex; }
   #busySvg{ width:120px; height:56px; color:#fff; opacity:.95; }
@@ -1420,6 +1416,31 @@
 </style>
 </head>
 <body data-app="topo">
+  <!-- Build version stamp — proves which deploy is live. Updated every export. -->
+  <div id="buildStamp" style="position:fixed; right:8px; bottom:6px; z-index:9999;
+       font:10px/1.4 ui-monospace,'IBM Plex Mono',monospace; color:rgba(128,128,128,.7);
+       background:rgba(0,0,0,.35); padding:3px 8px; border-radius:6px; pointer-events:none;
+       backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
+  <script>
+    // BUILD is bumped on every code export. Compare against server /health.
+    window.__BUILD__ = { html: 'v0.11.0', date: '2026-08-19' };
+    (function(){
+      const el = document.getElementById('buildStamp');
+      if(!el) return;
+      el.textContent = 'html ' + window.__BUILD__.html;
+      // Also fetch the backend build so we can confirm both match.
+      const base = (window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1') ? 'http://localhost:3001' : '';
+      fetch(base + '/health', { cache:'no-store' })
+        .then(r=>r.json())
+        .then(h=>{
+          const server = h.build || '?';
+          const match = server === window.__BUILD__.html;
+          el.textContent = 'html ' + window.__BUILD__.html + ' · srv ' + server + (match ? ' ✓' : ' ⚠');
+          if(!match) el.style.color = 'rgba(236,90,42,.95)';
+        })
+        .catch(()=>{ el.textContent = 'html ' + window.__BUILD__.html + ' · srv offline'; });
+    })();
+  </script>
   <nav id="tabbar" role="tablist" aria-label="App switcher">
     <button class="apptab" id="tabTopo" role="tab" aria-selected="true">
       <svg viewBox="0 0 40 26" aria-hidden="true"><path d="M2 20 C10 6, 18 22, 26 12 S36 5, 38 8" fill="none" stroke="#ec5a2a" stroke-width="3.4" stroke-linecap="round"/><path d="M2 24 C12 12, 20 26, 30 17" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/></svg>
