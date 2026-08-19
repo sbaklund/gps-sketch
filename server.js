@@ -98,7 +98,13 @@ app.use('/health', (req, res, next) => { res.set('Cache-Control', 'no-store'); n
 
 app.use(express.static(path.join(__dirname, 'public'), {
   maxAge: '1h',                 // cache static assets for 1 hour
-  index: 'topo-art-v5-merged.html',   // serve this as the homepage
+  index: 'topo-art-v5-merged.html',
+  setHeaders(res, filePath) {
+    // Never cache HTML — ensures deploys take effect immediately
+    if (filePath.endsWith('.html')) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  },
 }));
 
 // Also serve the root index explicitly (in case someone hits / )
