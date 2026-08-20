@@ -1423,7 +1423,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.16.0', date: '2026-08-19' };
+    window.__BUILD__ = { html: 'v0.17.0', date: '2026-08-19' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1483,7 +1483,7 @@
       </div>
       <div id="envNote"></div>
       <div id="loadMsg" class="note"></div>
-      <label class="toggle" style="margin-top:8px;"><input type="checkbox" id="demoTerrain"><span>Demo terrain (preview without backend)</span></label>
+      <label class="toggle" style="margin-top:8px;"><input type="checkbox" id="demoTerrain" checked><span>Demo terrain (preview without backend)</span></label>
       <label class="toggle" style="display:none;"><input type="checkbox" id="showRoute" checked><span>Show route line</span></label>
       <button class="btn" id="stravaBtn2" style="display:none;"></button>
       <button class="btn" id="retryElev" style="display:none;">Retry elevation</button>
@@ -17119,7 +17119,7 @@ async function tryLoadTerrain(){
  finally{ busy.classList.remove('on'); document.getElementById('retryElev').disabled=false; } }
 // Generate synthetic elevation sized to the current TER frame, biased so the
 // route sits in believable terrain. Lets you preview posters without the backend.
-let demoTerrainOn=false;
+let demoTerrainOn=true;
 function applyDemoTerrain(){
  if(!TER) return;
  const W=TER.w, H=TER.h, seed=(Math.abs(Math.round((TER.lat+TER.lon)*1000))||1)>>>0;
