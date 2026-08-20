@@ -1423,7 +1423,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.13.0', date: '2026-08-19' };
+    window.__BUILD__ = { html: 'v0.14.0', date: '2026-08-19' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -17142,21 +17142,25 @@ async function checkStravaStatus(){
   else { setStravaUI(false); }
  }catch(e){ console.warn('[topo] checkStravaStatus failed:', e.message, 'URL was:', BACKEND_URL+'/api/status'); } }
 async function loadStravaActivity(id,name){
+ console.log('[TOPO] loadStravaActivity START — id:', id, 'name:', name);
  msg('','Loading route…');
  try{
   const res=await fetch(`${BACKEND_URL}/api/streams/${id}`, { cache:'no-store' });
   if(!res.ok){ const b=await res.json().catch(()=>({})); throw new Error(b.error||`HTTP ${res.status}`); }
   const {points}=await res.json();
+  console.log('[TOPO] got', points?.length, 'points from server');
   if(!points || points.length<2) throw new Error('no GPS points on this activity');
   rawGpx=points.map(p=>({lat:p[1],lon:p[0],ele:null})); gpxBbox=bboxOf(rawGpx); gpxHasEle=false;
   document.getElementById('gpxName').textContent=`${name} · ${rawGpx.length.toLocaleString()} pts (from Strava)`;
   const fr=frameFromBbox(gpxBbox,0.18);
+  console.log('[TOPO] frame:', fr, '— calling loadRouteFrame');
   // Auto-fill title + smart subtitle
   const t0=document.getElementById('title');
   if(!t0.value.trim()) t0.value=name.toUpperCase();
   reverseGeocode(fr.centerLat, fr.centerLon);
   await loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom);
- }catch(err){ msg('warn','Could not load Strava route: '+err.message); } }
+  console.log('[TOPO] loadRouteFrame DONE — route should be visible');
+ }catch(err){ console.error('[TOPO] loadStravaActivity FAILED:', err); msg('warn','Could not load Strava route: '+err.message); } }
 window._loadTopoStravaRoute = loadStravaActivity;
 // Smart subtitle: reverse geocode the route center to "City, ST" or park name
 async function reverseGeocode(lat, lon){
@@ -19213,10 +19217,18 @@ render(); pushHist(); updateHistUI();
 
                 // Returning from a successful sign-in used to land on a closed
                 // overlay, so the user had to click Strava again to get to the
-                // thing they'd just authorised. Go straight to the picker.
-                if (justConnected && stravaConnected) {
-                    dbg('returned from Strava sign-in — opening activity picker');
-                    openStravaOverlay();
+                // thing they'd just authorised. Go straight to the picker — in
+                // the mode matching whichever tab the user connected from.
+                if (justConnected) {
+                    // Which tab did they start from? Saved before the OAuth redirect.
+                    let fromTab = 'abstract';
+                    try { fromTab = localStorage.getItem('gpxsketch_tab') || document.body.dataset.app || 'abstract'; } catch(e) {}
+                    try { localStorage.removeItem('gpxsketch_tab'); } catch(e) {}
+                    dbg('returned from Strava sign-in — opening picker in ' + fromTab + ' mode');
+                    // openStravaOverlay now checks the SERVER for connection state,
+                    // so it works even though the local stravaConnected flag may
+                    // not be set yet on this first load.
+                    openStravaOverlay(fromTab);
                 }
 
                 if (err || justConnected) {
