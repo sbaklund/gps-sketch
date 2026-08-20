@@ -1423,7 +1423,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.11.0', date: '2026-08-19' };
+    window.__BUILD__ = { html: 'v0.12.0', date: '2026-08-19' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -17121,6 +17121,7 @@ document.getElementById('retryElev').onclick=async()=>{
 /* ---------- Strava connect ---------- */
 let stravaConnected=false;
 function setStravaUI(connected, name, profile){
+ console.log('[TOPO] setStravaUI called — connected:', connected, 'name:', name);
  stravaConnected=connected;
  const label=document.getElementById('stravaBtnLabel');
  const avatar=document.getElementById('stravaBtnAvatar');
@@ -17135,6 +17136,7 @@ function setStravaUI(connected, name, profile){
   avatar.style.display='none';
  } }
 window._setTopoStravaUI = setStravaUI;
+console.log('[TOPO] _setTopoStravaUI registered');
 async function checkStravaStatus(){
  try{
   const res=await fetch(`${BACKEND_URL}/api/status`, { cache:'no-store' });
@@ -19946,19 +19948,30 @@ render(); pushHist(); updateHistUI();
         // Shared overlay: 'abstract' = multi-select + Add to canvas,
         // 'topo' = single-select, loads straight onto the Topo canvas.
         let stravaOverlayMode = 'abstract';
-        function openStravaOverlay(mode) {
+        async function openStravaOverlay(mode) {
             stravaOverlayMode = (mode === 'topo') ? 'topo' : 'abstract';
+            console.log('[ABS] openStravaOverlay mode:', stravaOverlayMode, 'local stravaConnected:', stravaConnected);
             // Footer (multi-select + import) only makes sense in Abstract mode
             const footer = document.getElementById('dashFooter');
             if (footer) footer.style.display = stravaOverlayMode === 'topo' ? 'none' : 'flex';
             selectedActivityIds.clear();
             stravaOverlay.classList.add('open');
-            if (stravaConnected && stravaReal) {
-                showStravaView('loading');
-                loadRealActivities();
-                return;
-            }
+            showStravaView('loading');
+            // Ask the SERVER whether we're connected — don't trust the local flag,
+            // which may be stale if the user connected from the other tab.
+            try {
+                const res = await fetch(`${window.BACKEND_URL}/api/status`, { cache: 'no-store' });
+                const s = await res.json();
+                console.log('[ABS] server status:', s);
+                if (s.connected) {
+                    stravaConnected = true;
+                    stravaReal = true;
+                    loadRealActivities();
+                    return;
+                }
+            } catch (e) { console.warn('[ABS] status check failed:', e.message); }
             // not connected → show the real Connect launcher
+            stravaConnected = false;
             stravaConnectNote.style.display = stravaReal ? 'none' : 'block';
             showStravaView('connect');
         }
@@ -19997,6 +20010,7 @@ render(); pushHist(); updateHistUI();
         });
 
         stravaDisconnectButton.addEventListener('click', () => {
+            console.log('[ABS] disconnect clicked. mode:', stravaOverlayMode, '_setTopoStravaUI exists:', !!window._setTopoStravaUI);
             if (stravaReal) { fetch(`${window.BACKEND_URL}/auth/logout`).catch(() => {}); }
             stravaConnected = false;
             selectedActivityIds.clear();
