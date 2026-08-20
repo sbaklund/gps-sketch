@@ -1423,7 +1423,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.15.0', date: '2026-08-19' };
+    window.__BUILD__ = { html: 'v0.16.0', date: '2026-08-19' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1483,6 +1483,7 @@
       </div>
       <div id="envNote"></div>
       <div id="loadMsg" class="note"></div>
+      <label class="toggle" style="margin-top:8px;"><input type="checkbox" id="demoTerrain"><span>Demo terrain (preview without backend)</span></label>
       <label class="toggle" style="display:none;"><input type="checkbox" id="showRoute" checked><span>Show route line</span></label>
       <button class="btn" id="stravaBtn2" style="display:none;"></button>
       <button class="btn" id="retryElev" style="display:none;">Retry elevation</button>
@@ -17049,6 +17050,11 @@ wt.oninput=()=>{ state.weight=+wt.value; wtv.textContent=(+wt.value).toFixed(1);
 document.getElementById('showRoute').onchange=e=>{ state.showRoute=e.target.checked; render(); pushHist(); };
 document.getElementById('title').oninput=()=>{ render(); pushHistSoon(); };
 document.getElementById('subtitle').oninput=()=>{ render(); pushHistSoon(); };
+document.getElementById('demoTerrain').onchange=(e)=>{
+ demoTerrainOn=e.target.checked;
+ if(demoTerrainOn && rawGpx && TER){ applyDemoTerrain(); msg('ok','Demo terrain on.'); }
+ else if(!demoTerrainOn && rawGpx){ tryLoadTerrain(); } // try real again
+};
 
 
 const busy=document.getElementById('busy'),loadMsg=document.getElementById('loadMsg');
@@ -17100,10 +17106,41 @@ async function tryLoadTerrain(){
     which elevation provider actually served the data. */
  try{ const {data,minFt,maxFt}=await fetchTerrain(TER,'auto'); terrainCache.set(key,{rawData:data,minFt,maxFt}); applyElev(data,false); }
  catch(err){ const m=String(err.message);
-  if(m.includes('terrain server')) msg('warn','Backend not reachable — is it running? Route still shown.');
-  else msg('warn','Elevation didn\u2019t load: '+m+'. Route still shown.');
-  render(); }
+  if(demoTerrainOn){
+   // Demo mode: synthesize terrain shaped to this frame so you can experiment
+   // with the poster look before the real elevation backend is wired up.
+   applyDemoTerrain();
+   msg('ok','Demo terrain (synthetic) — real elevation didn\u2019t load.');
+  } else {
+   if(m.includes('terrain server')) msg('warn','Backend not reachable — is it running? Route still shown.');
+   else msg('warn','Elevation didn\u2019t load: '+m+'. Route still shown.');
+   render();
+  } }
  finally{ busy.classList.remove('on'); document.getElementById('retryElev').disabled=false; } }
+// Generate synthetic elevation sized to the current TER frame, biased so the
+// route sits in believable terrain. Lets you preview posters without the backend.
+let demoTerrainOn=false;
+function applyDemoTerrain(){
+ if(!TER) return;
+ const W=TER.w, H=TER.h, seed=(Math.abs(Math.round((TER.lat+TER.lon)*1000))||1)>>>0;
+ const rng=mulberry32(seed), peaks=[];
+ peaks.push({cx:W*(0.38+rng()*0.24),cy:H*(0.32+rng()*0.24),h:1.15+rng()*0.3,s:W*0.26});
+ const extra=2+Math.floor(rng()*3);
+ for(let i=0;i<extra;i++) peaks.push({cx:rng()*W,cy:rng()*H,h:0.35+rng()*0.75,s:W*(0.1+rng()*0.16)});
+ const noise=[]; for(let k=0;k<4;k++) noise.push({fx:(0.5+rng()*2)/W*6.283,fy:(0.5+rng()*2)/H*6.283,px:rng()*6.28,py:rng()*6.28,a:0.05+rng()*0.06});
+ const tiltx=(rng()-0.5)*0.25, tilty=(rng()-0.5)*0.25, v=new Float64Array(W*H);
+ let min=Infinity,max=-Infinity;
+ for(let y=0;y<H;y++) for(let x=0;x<W;x++){ let e=0;
+  for(const p of peaks){ const dx=x-p.cx,dy=y-p.cy; e+=p.h*Math.exp(-(dx*dx+dy*dy)/(2*p.s*p.s)); }
+  for(const n of noise){ e+=n.a*Math.sin(n.fx*x+n.px)*Math.sin(n.fy*y+n.py); }
+  e+=tiltx*(x/W)+tilty*(y/H);
+  v[y*W+x]=e; if(e<min)min=e; if(e>max)max=e; }
+ // Map to a plausible foot range (2,000–11,000 ft)
+ const LO=2000, HI=11000, span=max-min||1;
+ for(let i=0;i<v.length;i++) v[i]=LO+((v[i]-min)/span)*(HI-LO);
+ TER.data=v; TER.minFt=LO; TER.maxFt=HI; TER.kind='demo'; TER.hasElev=true;
+ if(route&&rawGpx) routeStats=gpxStatsWithTerrain(rawGpx,route,TER);
+ crossfade(); }
 /* Loads a route frame centred on given coordinates and kicks off the elevation
    fetch. Called automatically after a GPX/Strava import — no manual lat/lon/
    zoom entry needed; the frame is derived from the route's own bounding box. */
@@ -17173,7 +17210,7 @@ async function reverseGeocode(lat, lon, hiPoint){
   const res=await fetch(url, { cache:'no-store' });
   if(!res.ok) throw new Error('geocode failed');
   const g=await res.json();
-  if(g.subtitle){ sub.value=g.subtitle; console.log('[TOPO] subtitle:', g.subtitle, '('+g.tier+')'); }
+  if(g.subtitle){ sub.value=g.subtitle; console.log('[TOPO] subtitle:', g.subtitle, '('+g.tier+')'); if(typeof render==='function') render(); }
  }catch(e){ console.warn('[TOPO] geocode failed:', e.message); }
 }
 // Find the highest-elevation point on a route (returns {lat,lon} or null).
