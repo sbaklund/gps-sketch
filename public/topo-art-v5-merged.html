@@ -1423,7 +1423,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.12.0', date: '2026-08-19' };
+    window.__BUILD__ = { html: 'v0.13.0', date: '2026-08-19' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1469,13 +1469,24 @@
   <div id="shell">
   <aside class="rail" id="rail">
 
-    <div class="group" id="stravaGroup">
-      <div class="label">Strava</div>
+    <div class="group" id="routeGroup">
+      <div class="label">Route</div>
       <button class="btn" id="stravaBtn" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="opacity:.7"><path d="M10.5 1L6.5 9.5h2.8L10.5 7l1.2 2.5h2.8L10.5 1zM5.5 9.5L3 4.5 0.5 9.5h2.1l.4-.8.4.8h2.1z"/></svg>
         <span id="stravaBtnLabel">Connect to Strava</span>
       </button>
       <img id="stravaBtnAvatar" style="display:none; width:22px; height:22px; border-radius:50%; margin-right:4px;">
+      <div class="field" style="margin-top:8px;">
+        <label for="gpxInput" class="btn" style="display:block; text-align:center; font-size:11px;">⬆ Upload GPX file</label>
+        <input type="file" id="gpxInput" accept=".gpx,.xml" style="display:none;">
+        <div id="gpxName" class="note"></div>
+      </div>
+      <div id="envNote"></div>
+      <div id="loadMsg" class="note"></div>
+      <label class="toggle" style="display:none;"><input type="checkbox" id="showRoute" checked><span>Show route line</span></label>
+      <button class="btn" id="stravaBtn2" style="display:none;"></button>
+      <button class="btn" id="retryElev" style="display:none;">Retry elevation</button>
+      <button class="btn" id="testSrc" style="display:none;">Test source</button>
     </div>
 
     <div class="group">
@@ -1521,21 +1532,6 @@
       <input type="range" id="interval" min="80" max="500" step="20" value="200">
       <div class="row" style="margin-top:14px;"><label for="weight">Line weight</label><span class="val" id="weightVal">1.0</span></div>
       <input type="range" id="weight" min="0.3" max="2.5" step="0.1" value="1.0">
-    </div>
-
-    <div class="group" id="routeGroup">
-      <div class="label">Route</div>
-      <label class="toggle"><input type="checkbox" id="showRoute" checked><span>Show route line</span></label>
-      <div class="field" style="margin-top:8px;">
-        <label for="gpxInput" class="btn" style="display:block; text-align:center; font-size:11px;">⬆ Upload GPX file</label>
-        <input type="file" id="gpxInput" accept=".gpx,.xml" style="display:none;">
-        <div id="gpxName" class="note"></div>
-      </div>
-      <div id="envNote"></div>
-      <div id="loadMsg" class="note"></div>
-      <button class="btn" id="stravaBtn2" style="display:none;"></button>
-      <button class="btn" id="retryElev" style="display:none;">Retry elevation</button>
-      <button class="btn" id="testSrc" style="display:none;">Test source</button>
     </div>
 
     <div class="group">
@@ -20096,12 +20092,16 @@ render(); pushHist(); updateHistUI();
                 if (selectedActivityIds.has(a.id)) card.classList.add('selected');
 
                 card.addEventListener('click', async () => {
+                    console.log('[ABS] card clicked. mode:', stravaOverlayMode, 'activity:', a.id, a.name);
                     if (stravaOverlayMode === 'topo') {
                         // Single-select: load straight onto the Topo canvas and close
+                        console.log('[ABS] TOPO branch — calling _loadTopoStravaRoute');
                         closeStravaOverlay();
                         if (window._loadTopoStravaRoute) await window._loadTopoStravaRoute(a.id, a.name);
+                        else console.error('[ABS] _loadTopoStravaRoute is MISSING');
                         return;
                     }
+                    console.log('[ABS] ABSTRACT branch — multi-select');
                     if (selectedActivityIds.has(a.id)) {
                         selectedActivityIds.delete(a.id);
                         card.classList.remove('selected');
