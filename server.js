@@ -5,7 +5,7 @@ console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.14.0';
+const BUILD = 'v0.15.0';
 console.log('[boot] build', BUILD);
 
 /**
@@ -41,6 +41,12 @@ try {
   strava = require('./routes/strava');
   console.log('[boot] routes/strava loaded ✓');
 } catch(e) { console.error('[boot] FATAL: cannot load routes/strava:', e.message, e.stack); process.exit(1); }
+
+let geocodeRouter;
+try {
+  geocodeRouter = require('./routes/geocode');
+  console.log('[boot] routes/geocode loaded ✓');
+} catch(e) { console.error('[boot] WARN: cannot load routes/geocode:', e.message); }
 
 // ---------------------------------------------------------------------------
 // CORS — only needed for local dev (production is same-origin)
@@ -145,6 +151,7 @@ app.get('/health', (req, res) => {
 // ---------------------------------------------------------------------------
 
 app.use('/api/terrain', terrainRouter);
+if (geocodeRouter) app.use('/api/geocode', geocodeRouter);
 app.use(strava.router);
 
 // 404 — but only for /api and /auth paths (static misses are already handled)
