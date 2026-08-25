@@ -1,4 +1,4 @@
-v'use strict';
+'use strict';
 
 console.log('[boot] server.js loading…');
 console.log('[boot] Node version:', process.version);
