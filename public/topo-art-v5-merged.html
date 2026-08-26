@@ -236,7 +236,11 @@
     overflow:hidden; text-overflow:ellipsis; }
   #topoBanner .bdot{ width:7px; height:7px; border-radius:50%; background:var(--accent); flex:none;
     box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
-  #topoBanner b{ color:var(--text); font-weight:600; }
+  #topoBanner .blink{ font:inherit; color:var(--accent); font-weight:600; cursor:pointer;
+    background:none; border:0; padding:0 1px; border-bottom:1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+    transition:color .12s, border-color .12s; }
+  #topoBanner .blink:hover{ color:var(--text); border-bottom-color:var(--text); }
+  #topoBanner .blink:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
   @media (max-width:520px){ #topoBanner{ font-size:10px; padding:8px 12px; white-space:normal; text-align:center; line-height:1.35; } }
   #poster{ width:100%; height:auto; display:block; border-radius:2px; }
   /* (Topo Strava now uses the shared popup overlay, not a sidebar list) */
@@ -1438,7 +1442,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.19.0', date: '2026-08-26' };
+    window.__BUILD__ = { html: 'v0.20.0', date: '2026-08-26' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1498,7 +1502,6 @@
       </div>
       <div id="envNote"></div>
       <div id="loadMsg" class="note"></div>
-      <label class="toggle" style="margin-top:8px;"><input type="checkbox" id="demoTerrain"><span>Demo terrain (synthetic preview)</span></label>
       <label class="toggle" style="display:none;"><input type="checkbox" id="showRoute" checked><span>Show route line</span></label>
       <button class="btn" id="stravaBtn2" style="display:none;"></button>
       <button class="btn" id="retryElev" style="display:none;">Retry elevation</button>
@@ -1567,7 +1570,7 @@
   </aside>
 
   <main id="stage">
-    <div id="topoBanner"><span class="bdot" aria-hidden="true"></span><span><b>Connect to Strava</b> or <b>Upload GPX</b> to generate a new map.</span></div>
+    <div id="topoBanner"><span class="bdot" aria-hidden="true"></span><span><button type="button" class="blink" id="bannerStrava">Connect to Strava</button> or <button type="button" class="blink" id="bannerUpload">Upload GPX</button> to generate a new map.</span></div>
     <div id="poster-shell">
       <svg id="poster" viewBox="0 0 900 1200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Topographic artwork preview"></svg>
       <div id="busy">
@@ -16819,7 +16822,14 @@ function render(){
   const contours=d3.contours().size([TER.w,TER.h]).thresholds(levels)(TER.data),geo=d3.geoPath();
   const g=svg.append('g').attr('transform',sc).attr('clip-path','url(#mapclip)');
   const doFill=state.mode==='fill'||state.mode==='both', doLine=state.mode==='line'||state.mode==='both';
-  if(doFill) g.append('g').selectAll('path').data(contours).join('path').attr('d',geo).attr('fill',d=>rampFn((d.value-lo)/span)).attr('stroke','none');
+  if(doFill){
+   /* Base layer: the lowest ramp colour under everything. d3.contours only
+      produces bands for area ABOVE the first threshold, so terrain below it
+      (valley floors, frame corners) would otherwise fall through to the poster
+      background — a hard off-colour blob on any theme whose bg ≠ ramp[0]. */
+   g.append('rect').attr('width',TER.w).attr('height',TER.h).attr('fill',rampFn(0));
+   g.append('g').selectAll('path').data(contours).join('path').attr('d',geo).attr('fill',d=>rampFn((d.value-lo)/span)).attr('stroke','none');
+  }
   if(doLine){ const wBase=state.weight/(MAP.w/TER.w);
    /* Lines-only is a two-colour piece, so the strokes go full strength. */
    const op = state.mode==='line' ? 1 : P.lineOp;
@@ -17124,11 +17134,6 @@ rw.oninput=()=>{ state.routeWidth=+rw.value; rwv.textContent=(+rw.value).toFixed
 document.getElementById('showRoute').onchange=e=>{ state.showRoute=e.target.checked; render(); pushHist(); };
 document.getElementById('title').oninput=()=>{ render(); pushHistSoon(); };
 document.getElementById('subtitle').oninput=()=>{ render(); pushHistSoon(); };
-document.getElementById('demoTerrain').onchange=(e)=>{
- demoTerrainOn=e.target.checked;
- if(demoTerrainOn && rawGpx && TER){ applyDemoTerrain(); msg('ok','Demo terrain on.'); }
- else if(!demoTerrainOn && rawGpx){ tryLoadTerrain(); } // try real again
-};
 
 
 const busy=document.getElementById('busy'),loadMsg=document.getElementById('loadMsg');
@@ -17184,42 +17189,11 @@ async function tryLoadTerrain(){
     which elevation provider actually served the data. */
  try{ const {data,minFt,maxFt}=await fetchTerrain(TER,'auto'); terrainCache.set(key,{rawData:data,minFt,maxFt}); applyElev(data,false); }
  catch(err){ const m=String(err.message);
-  if(demoTerrainOn){
-   // Demo mode: synthesize terrain shaped to this frame so you can experiment
-   // with the poster look before the real elevation backend is wired up.
-   applyDemoTerrain();
-   msg('ok','Demo terrain (synthetic) — real elevation didn\u2019t load.');
-  } else {
-   if(m.includes('terrain server')) msg('warn','Backend not reachable — is it running? Route still shown.');
-   else msg('warn','Elevation didn\u2019t load: '+m+'. Route still shown.');
-   render();
-  } }
+  if(m.includes('terrain server')) msg('warn','Backend not reachable — is it running? Route still shown.');
+  else msg('warn','Elevation didn’t load: '+m+'. Route still shown.');
+  render();
+ }
  finally{ busy.classList.remove('on'); document.getElementById('retryElev').disabled=false; } }
-// Generate synthetic elevation sized to the current TER frame, biased so the
-// route sits in believable terrain. Lets you preview posters without the backend.
-let demoTerrainOn=false;
-function applyDemoTerrain(){
- if(!TER) return;
- const W=TER.w, H=TER.h, seed=(Math.abs(Math.round((TER.lat+TER.lon)*1000))||1)>>>0;
- const rng=mulberry32(seed), peaks=[];
- peaks.push({cx:W*(0.38+rng()*0.24),cy:H*(0.32+rng()*0.24),h:1.15+rng()*0.3,s:W*0.26});
- const extra=2+Math.floor(rng()*3);
- for(let i=0;i<extra;i++) peaks.push({cx:rng()*W,cy:rng()*H,h:0.35+rng()*0.75,s:W*(0.1+rng()*0.16)});
- const noise=[]; for(let k=0;k<4;k++) noise.push({fx:(0.5+rng()*2)/W*6.283,fy:(0.5+rng()*2)/H*6.283,px:rng()*6.28,py:rng()*6.28,a:0.05+rng()*0.06});
- const tiltx=(rng()-0.5)*0.25, tilty=(rng()-0.5)*0.25, v=new Float64Array(W*H);
- let min=Infinity,max=-Infinity;
- for(let y=0;y<H;y++) for(let x=0;x<W;x++){ let e=0;
-  for(const p of peaks){ const dx=x-p.cx,dy=y-p.cy; e+=p.h*Math.exp(-(dx*dx+dy*dy)/(2*p.s*p.s)); }
-  for(const n of noise){ e+=n.a*Math.sin(n.fx*x+n.px)*Math.sin(n.fy*y+n.py); }
-  e+=tiltx*(x/W)+tilty*(y/H);
-  v[y*W+x]=e; if(e<min)min=e; if(e>max)max=e; }
- // Map to a plausible foot range (2,000–11,000 ft)
- const LO=2000, HI=11000, span=max-min||1;
- for(let i=0;i<v.length;i++) v[i]=LO+((v[i]-min)/span)*(HI-LO);
- TER.data=v; TER.minFt=LO; TER.maxFt=HI; TER.kind='demo'; TER.hasElev=true;
- applyAutoInterval(LO,HI);
- if(route&&rawGpx) routeStats=gpxStatsWithTerrain(rawGpx,route,TER);
- crossfade(); }
 /* Loads a route frame centred on given coordinates and kicks off the elevation
    fetch. Called automatically after a GPX/Strava import — no manual lat/lon/
    zoom entry needed; the frame is derived from the route's own bounding box. */
@@ -17307,6 +17281,11 @@ document.getElementById('stravaBtn').onclick=async()=>{
   return; }
  try{ localStorage.setItem('gpxsketch_tab', currentApp); }catch(e){}
  window.location.href = `${BACKEND_URL}/auth/login`; };
+/* Banner shortcuts — proxy straight to the toolbar controls so behaviour stays
+   in sync (Strava connect/picker + the GPX file dialog) without hunting the rail. */
+{ const bs=document.getElementById('bannerStrava'), bu=document.getElementById('bannerUpload');
+  if(bs) bs.onclick=()=>document.getElementById('stravaBtn').click();
+  if(bu) bu.onclick=()=>document.getElementById('gpxInput').click(); }
 /* Coming back from Strava's sign-in redirect lands here with a query param
    on THIS page (the front end), not the backend. Abstract's own script reads
    AND cleans up this same query string (to auto-open its activity picker) —
