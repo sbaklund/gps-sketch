@@ -1433,6 +1433,22 @@
         @keyframes spin { to { transform: rotate(360deg); } }
 
 </style>
+<script>
+  /* ---- Launch hygiene: debug gate ----
+     Verbose console.log/info/debug are silenced for the public site so the
+     browser console stays clean. They're kept on localhost, and on any URL
+     with ?debug — which ALSO reveals the build-version badge. warn/error are
+     never silenced, so real problems still surface. Runs before every other
+     script so nothing logs before the gate is in place. */
+  (function(){
+    try{
+      var DEBUG = /[?&]debug\b/i.test(location.search)
+               || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+      window.__DEBUG__ = DEBUG;
+      if(!DEBUG){ var noop=function(){}; console.log=noop; console.info=noop; console.debug=noop; }
+    }catch(e){}
+  })();
+</script>
 </head>
 <body data-app="topo">
   <!-- Build version stamp — proves which deploy is live. Updated every export. -->
@@ -1442,10 +1458,13 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.21.0', date: '2026-08-26' };
+    window.__BUILD__ = { html: 'v0.22.0', date: '2026-08-26' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
+      // Launch hygiene: the version badge is a dev/deploy tool, not for end users.
+      // Hidden on the public site; shown on localhost or with ?debug (set by the gate above).
+      if(!window.__DEBUG__){ el.style.display='none'; return; }
       el.textContent = 'html ' + window.__BUILD__.html;
       // Also fetch the backend build so we can confirm both match.
       const base = (window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1') ? 'http://localhost:3001' : '';
@@ -16645,6 +16664,7 @@ let state={ preset:SIGNATURE[0], themeRef:{type:'sig',key:'relief'}, mode:SIGNAT
  bgOverride:null, lineOverride:null, seed:7 };
 let TER=null, route=null, routeStats=null, routeSmooth=true;
 let currentIsDefault=false;   // true while showing the built-in Wonderland default
+let terrainStatus='idle';     // 'idle' | 'loading' | 'ok' | 'failed' — drives the legend's elevation note
 let rawGpx=null, gpxBbox=null, gpxHasEle=false;
 const terrainCache=new Map();
 
@@ -16861,7 +16881,9 @@ function render(){
   if(routeStats.gain!=null) parts.push(`+${Math.round(routeStats.gain).toLocaleString()} FT`);
   if(routeStats.high!=null) parts.push(`HIGH ${Math.round(routeStats.high).toLocaleString()} FT`);
   statLine=parts.join('   ·   ');
-  const ns=TER.lat>=0?'N':'S',ew=TER.lon>=0?'E':'W'; coordLine=`${Math.abs(TER.lat).toFixed(4)}° ${ns}   ${Math.abs(TER.lon).toFixed(4)}° ${ew}${TER.hasElev?'':'   ·   ELEVATION LOADING'}`;
+  const ns=TER.lat>=0?'N':'S',ew=TER.lon>=0?'E':'W';
+  const elevNote = TER.hasElev ? '' : (terrainStatus==='failed' ? '   ·   ELEVATION UNAVAILABLE' : '   ·   ELEVATION LOADING');
+  coordLine=`${Math.abs(TER.lat).toFixed(4)}° ${ns}   ${Math.abs(TER.lon).toFixed(4)}° ${ew}${elevNote}`;
  } else if(TER.data){
   const r10=x=>Math.round(x/10)*10; statLine=`ELEVATION ${r10(TER.minFt).toLocaleString()}–${r10(TER.maxFt).toLocaleString()} FT   ·   CONTOUR ${state.interval} FT`;
   const ns=TER.lat>=0?'N':'S',ew=TER.lon>=0?'E':'W'; coordLine=`${Math.abs(TER.lat).toFixed(4)}° ${ns}   ${Math.abs(TER.lon).toFixed(4)}° ${ew}`;
@@ -17180,6 +17202,8 @@ async function tryLoadTerrain(){
   let minFt=Infinity, maxFt=-Infinity;
   for(let i=0;i<data.length;i++){ if(data[i]<minFt)minFt=data[i]; if(data[i]>maxFt)maxFt=data[i]; }
   TER.data=data; TER.minFt=minFt; TER.maxFt=maxFt; TER.kind='real'; TER.hasElev=true;
+  terrainStatus='ok';
+  { const rEl=document.getElementById('retryElev'); if(rEl) rEl.style.display='none'; }
   applyAutoInterval(minFt,maxFt);
   if(route&&rawGpx) routeStats=gpxStatsWithTerrain(rawGpx,route,TER);
   const tag=cached?' (cached)':'';
@@ -17187,14 +17211,17 @@ async function tryLoadTerrain(){
   else msg('ok',`Loaded${tag} · ${Math.round(minFt).toLocaleString()}–${Math.round(maxFt).toLocaleString()} ft.`); crossfade();
   if(typeof saveSessionSoon==='function') saveSessionSoon(); };
  if(terrainCache.has(key)){ const c=terrainCache.get(key); applyElev(c.rawData,true); return; }
- busy.classList.add('on'); document.getElementById('retryElev').disabled=true; msg('','Creating map…');
+ busy.classList.add('on'); document.getElementById('retryElev').disabled=true; terrainStatus='loading'; msg('','Creating map…');
  /* 'auto' — the server tries its best available source and falls back
     automatically. The person using this app never needs to know or care
     which elevation provider actually served the data. */
  try{ const {data,minFt,maxFt}=await fetchTerrain(TER,'auto'); terrainCache.set(key,{rawData:data,minFt,maxFt}); applyElev(data,false); }
- catch(err){ const m=String(err.message);
-  if(m.includes('terrain server')) msg('warn','Backend not reachable — is it running? Route still shown.');
-  else msg('warn','Elevation didn’t load: '+m+'. Route still shown.');
+ catch(err){
+  /* Graceful fallback: the route still makes a clean poster on a plain
+     background. Keep the message friendly and offer the retry affordance. */
+  terrainStatus='failed';
+  msg('warn','Couldn’t load elevation for this area — showing your route on a plain background. Tap “Retry elevation” to try again.');
+  document.getElementById('retryElev').style.display='';
   render();
  }
  finally{ busy.classList.remove('on'); document.getElementById('retryElev').disabled=false; } }
