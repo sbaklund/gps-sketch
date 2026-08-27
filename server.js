@@ -5,7 +5,7 @@ console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.24.0';
+const BUILD = 'v0.25.0';
 console.log('[boot] build', BUILD);
 
 /**
