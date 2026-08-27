@@ -115,24 +115,30 @@ function parseOverpass(json) {
   return { polys, lines };
 }
 
-// POST one Overpass mirror with the canonical `data=` form encoding. Returns
-// parsed JSON, or throws with a helpful message (status + a snippet of the body,
-// which is where Overpass puts its "rate_limited" / syntax errors).
-async function postOverpass(url, query) {
+// Hit one Overpass mirror. Default method is GET (`?data=<query>`) — the SAME
+// request style as the geocoder's Nominatim call, which is known to work from
+// the deploy host; a POST fallback covers mirrors that prefer it. Returns parsed
+// JSON, or throws with the status + a body snippet (where Overpass reports
+// "rate_limited" / syntax errors).
+async function hitOverpass(url, query, method) {
   const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   const to = ctrl ? setTimeout(() => ctrl.abort(), 25000) : null;
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
-      body: 'data=' + encodeURIComponent(query),
-      signal: ctrl ? ctrl.signal : undefined,
-    });
+    const opts = { headers: { 'User-Agent': UA, 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined };
+    let target = url;
+    if (method === 'POST') {
+      opts.method = 'POST';
+      opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+      opts.body = 'data=' + encodeURIComponent(query);
+    } else {
+      target = url + '?data=' + encodeURIComponent(query);   // GET
+    }
+    const res = await fetch(target, opts);
     if (to) clearTimeout(to);
     const text = await res.text();
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 160).replace(/\s+/g, ' ')}`);
     try { return JSON.parse(text); }
-    catch { throw new Error(`non-JSON reply: ${text.slice(0, 160).replace(/\s+/g, ' ')}`); }
+    catch { throw new Error(`non-JSON: ${text.slice(0, 160).replace(/\s+/g, ' ')}`); }
   } catch (e) {
     if (to) clearTimeout(to);
     throw e;
@@ -142,12 +148,9 @@ async function postOverpass(url, query) {
 async function fetchOverpass(query) {
   let lastErr;
   for (const url of OVERPASS_MIRRORS) {
-    try {
-      const json = await postOverpass(url, query);
-      return json;
-    } catch (e) {
-      lastErr = e;
-      console.warn(`[features] overpass mirror failed (${url}): ${e.message}`);
+    for (const method of ['GET', 'POST']) {
+      try { return await hitOverpass(url, query, method); }
+      catch (e) { lastErr = e; console.warn(`[features] overpass ${method} failed (${url}): ${e.message}`); }
     }
   }
   throw lastErr || new Error('all overpass mirrors failed');
@@ -184,6 +187,26 @@ router.get('/', async (req, res) => {
     // rather than a scary network error; the poster is fine without it.
     res.json({ bbox: [s, w, n, e], polys: [], lines: [], error: 'overpass unavailable' });
   }
+});
+
+// ---- diagnostic: GET /api/features/diag --------------------------------
+// Visit this in a browser on the deployed site to see exactly why the water
+// overlay can't reach Overpass. Tries every mirror × method with a tiny query.
+router.get('/diag', async (req, res) => {
+  const q = '[out:json][timeout:15];(way["natural"="water"](40.00,-105.30,40.05,-105.25););out geom 5;';
+  const results = [];
+  for (const url of OVERPASS_MIRRORS) {
+    for (const method of ['GET', 'POST']) {
+      const t0 = Date.now();
+      try {
+        const json = await hitOverpass(url, method === 'GET' ? q : q, method);
+        results.push({ url, method, ok: true, ms: Date.now() - t0, elements: (json.elements || []).length });
+      } catch (e) {
+        results.push({ url, method, ok: false, ms: Date.now() - t0, error: e.message });
+      }
+    }
+  }
+  res.json({ node: process.version, hasGlobalFetch: typeof fetch === 'function', results });
 });
 
 module.exports = router;
