@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!-- ==================================================================== -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.26.0                              -->
+<!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
+<!-- ==================================================================== -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -388,6 +392,14 @@
         button:hover { background-color: #F3F4F1; }
         button:active { transform: scale(0.98); }
         button:focus-visible { outline: 2px solid var(--abs-accent); outline-offset: 2px; }
+        /* Fill / Outline toolbar toggles */
+        .fo-toggle { display:inline-flex; align-items:center; gap:6px; }
+        .fo-toggle .fo-dot { width:9px; height:9px; border-radius:50%; border:1.5px solid currentColor; }
+        .fo-toggle[aria-pressed="true"] { background-color: var(--abs-accent); border-color: var(--abs-accent); color:#fff; }
+        .fo-toggle[aria-pressed="true"]:hover { background-color: var(--abs-accent-dark); }
+        .fo-toggle[aria-pressed="true"] .fo-dot { background:#fff; border-color:#fff; }
+        .fo-toggle[aria-pressed="false"] .fo-dot { background:transparent; }
+        .fo-toggle[aria-pressed="false"] .fo-dot.fo-fill { background:currentColor; }
 
         #reshuffleButton {
             background-color: var(--abs-accent);
@@ -1466,7 +1478,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.25.0', date: '2026-08-26' };
+    window.__BUILD__ = { html: 'v0.26.0', date: '2026-08-26' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1537,7 +1549,7 @@
     </div>
 
     <div class="group">
-      <div class="label labelrow">Themes<button type="button" class="diceBtn" id="diceTheme" title="Surprise me — random theme" aria-label="Random theme">&#127922;</button></div>
+      <div class="label">Themes</div>
       <div id="signaturePane" class="presets"></div>
       <div class="morewrap">
         <button class="btn" id="moreBtn"><span id="moreBtnLabel">More themes</span><span id="moreCount" style="color:var(--accent);font-weight:600;"></span></button>
@@ -1546,6 +1558,7 @@
           <div id="moreList"></div>
         </div>
       </div>
+      <button class="btn" id="diceTheme" title="Surprise me — random theme" style="width:100%; margin-top:var(--gap); display:flex; align-items:center; justify-content:center; gap:7px;"><span aria-hidden="true">&#127922;</span> Surprise me</button>
     </div>
 
     <div class="group">
@@ -1653,14 +1666,19 @@
                 </button>
                 <button id="dicePaletteButton" title="Surprise me — random palette">&#127922;</button>
                 <div id="paletteDropdown">
+                    <button id="surpriseButton">&#127922; Surprise Me</button>
                     <div class="palette-section-title">Favorites</div>
                     <div id="favoritesList"></div>
                     <div class="palette-section-title">Featured</div>
                     <div id="featuredList"></div>
-                    <div class="palette-section-title">Full library (<span id="libCount"></span> palettes)</div>
-                    <div id="libraryList" class="library-scroll"></div>
-                    <button id="surpriseButton">&#127922; Surprise Me</button>
+                    <span id="libCount" hidden></span>
+                    <div id="libraryList" hidden></div>
                 </div>
+            </div>
+            <div class="control-group" title="Turn fill and/or outline on for all routes. Colors are auto-picked from your palette (fill and outline never match); fine-tune them in the color dock below.">
+                <label>Style</label>
+                <button id="toggleFillBtn" class="fo-toggle" aria-pressed="true" title="Fill all routes"><span class="fo-dot fo-fill" aria-hidden="true"></span>Fill</button>
+                <button id="toggleOutlineBtn" class="fo-toggle" aria-pressed="false" title="Outline all routes"><span class="fo-dot" aria-hidden="true"></span>Outline</button>
             </div>
             <div class="control-group" title="Background auto-matches your palette when art is generated. Pick a color to override, or reset to auto.">
                 <label for="bgColorInput">Background</label>
@@ -17019,8 +17037,7 @@ document.addEventListener('keydown',e=>{ const t=e.target;
 function markSelectedTheme(){
  document.querySelectorAll('#signaturePane .preset').forEach(b=>b.setAttribute('aria-pressed', b.dataset.key===state.preset.key));
  document.querySelectorAll('#moreList .palrow').forEach(r=>r.classList.toggle('sel', 'pal:'+r.dataset.raw===state.preset.key));
- const isSig=state.themeRef.type==='sig';
- document.getElementById('moreBtnLabel').textContent = isSig ? 'More themes' : state.preset.name; }
+ document.getElementById('moreBtnLabel').textContent = 'More themes'; }
 /* Apply a theme by REFERENCE. The theme opens in its natural mode (the mode it
    was designed in), and the Light/Dark toggle is synced to match — so the
    toggle always shows the truth, and clicking the other side always changes. */
@@ -17948,10 +17965,13 @@ if(!restoreSession()) loadDefaultRoute();
         // the layout and colour assignment for the routes already loaded.
         function updateGenerateState() {
             const hasFiles = loadedFiles.length > 0;
-            reshuffleButton.disabled = !hasFiles || generating;
-            reshuffleButton.title = hasFiles
-                ? 'Re-roll the layout for these routes'
-                : 'Load routes to start';
+            // A cold-restored session has the artwork but not the source GPX, so
+            // reshuffle can't re-read the files — keep it disabled until re-upload.
+            const restoredNoSource = (typeof absRestored !== 'undefined') && absRestored;
+            reshuffleButton.disabled = !hasFiles || generating || restoredNoSource;
+            reshuffleButton.title = restoredNoSource
+                ? 'Re-upload a route to reshuffle — a restored session keeps the artwork but not the original GPX file'
+                : (hasFiles ? 'Re-roll the layout for these routes' : 'Load routes to start');
         }
         // kept under the old name so existing call sites keep working
         function updateDrawButtonState() { updateGenerateState(); }
@@ -18069,6 +18089,7 @@ if(!restoreSession()) loadDefaultRoute();
         }
 
         function renderRouteList() {
+            if (typeof saveAbsSoon === 'function') saveAbsSoon();   // persist add/remove/hide too
             const q = (routeSearch.value || '').trim().toLowerCase();
             routeCount.textContent = `${loadedFiles.length}/${MAX_ROUTES}`;
             routeCount.classList.toggle('full', loadedFiles.length >= MAX_ROUTES);
@@ -18277,6 +18298,13 @@ if(!restoreSession()) loadDefaultRoute();
         }
 
         fileInput.addEventListener('change', () => {
+            // A restored session has no source GPX, so it can't be extended with
+            // new routes — a fresh upload starts a new composition.
+            if (typeof absRestored !== 'undefined' && absRestored) {
+                loadedFiles = [];
+                if (fabricCanvas) { fabricCanvas.getObjects().filter(o => o.isPath).forEach(o => fabricCanvas.remove(o)); fabricCanvas.renderAll(); }
+                absRestored = false; clearAbs();
+            }
             const newFiles = Array.from(fileInput.files);
             let addedCount = 0, noRoom = 0;
             newFiles.forEach(file => {
@@ -18303,6 +18331,9 @@ if(!restoreSession()) loadDefaultRoute();
                 fabricCanvas.getObjects().filter(o => o.isPath).forEach(o => fabricCanvas.remove(o));
                 fabricCanvas.renderAll();
             }
+            if (typeof absRestored !== 'undefined') absRestored = false;
+            if (typeof clearAbs === 'function') clearAbs();   // wipe the saved session
+            artGenerated = false;
             selectRouteByUid(null);
             clearSelection();
             renderRouteList();
@@ -18353,33 +18384,16 @@ if(!restoreSession()) loadDefaultRoute();
             return row;
         }
 
-        const PICKER_EXTRA_COUNT = 10;  // non-featured palettes shown in the picker
         function populatePalettePicker() {
+            // Favorites stay pinned at the top; EVERY other palette goes under
+            // "Featured" so the whole library is browsable by scrolling (like Topo).
             favoritesList.innerHTML = '';
             featuredList.innerHTML = '';
-            libraryList.innerHTML = '';
-            let favs = 0, feat = 0, extras = 0;
             EXPANDED_PALETTES.forEach((palette, i) => {
                 const meta = PALETTE_LIBRARY[i];
-                if (meta.fav) {
-                    favoritesList.appendChild(buildPaletteRow(palette)); favs++;
-                } else if (meta.f) {
-                    featuredList.appendChild(buildPaletteRow(palette)); feat++;
-                } else if (extras < PICKER_EXTRA_COUNT) {
-                    libraryList.appendChild(buildPaletteRow(palette)); extras++;
-                }
+                if (meta.fav) favoritesList.appendChild(buildPaletteRow(palette));
+                else          featuredList.appendChild(buildPaletteRow(palette));
             });
-            libCount.textContent = EXPANDED_PALETTES.length;
-            const remaining = EXPANDED_PALETTES.length - (favs + feat + extras);
-            // Rebuild the "more via Surprise Me" note without stacking duplicates
-            const prevNote = paletteDropdown.querySelector('.picker-note');
-            if (prevNote) prevNote.remove();
-            const note = document.createElement('div');
-            note.className = 'picker-note';
-            note.textContent = remaining > 0
-                ? `+${remaining} more palettes via Surprise Me`
-                : 'That\u2019s the whole library';
-            libraryList.parentNode.insertBefore(note, surpriseButton);
             updatePaletteButton();
         }
 
@@ -18418,7 +18432,11 @@ if(!restoreSession()) loadDefaultRoute();
                 pathObj.paletteBase = color;
                 pathObj.paletteP = 0.5;
                 if (pathObj.fillOn)   { pathObj.fillColor = color; pathObj.fillBase = color; pathObj.fillP = 0.5; }
-                if (pathObj.strokeOn) { pathObj.strokeColor = color; pathObj.strokeBase = color; pathObj.strokeP = 0.5; }
+                if (pathObj.strokeOn) {
+                    // When both channels are on, keep the outline distinct from the fill.
+                    const sc = pathObj.fillOn ? pickDistinctColor(color) : color;
+                    pathObj.strokeColor = sc; pathObj.strokeBase = sc; pathObj.strokeP = 0.5;
+                }
                 // safety: if a path somehow has no active channel, fill it
                 if (!pathObj.fillOn && !pathObj.strokeOn) { pathObj.fillOn = true; pathObj.fillColor = color; pathObj.fillBase = color; pathObj.fillP = 0.5; }
                 applyAppearance(pathObj);
@@ -18544,6 +18562,7 @@ if(!restoreSession()) loadDefaultRoute();
             if (historyStack.length > HISTORY_MAX) historyStack.shift();
             historyIndex = historyStack.length - 1;
             if(window._updateAbsHistBar) window._updateAbsHistBar();
+            if(typeof saveAbsSoon === 'function') saveAbsSoon();   // autosave the session
         };
         let pushHistoryDebounced = function () {
             clearTimeout(historyDebounceTimer);
@@ -18660,6 +18679,154 @@ if(!restoreSession()) loadDefaultRoute();
             if (typeof obj.fillBase === 'undefined')   { obj.fillBase = obj.fillColor || '#1B1D1C'; obj.fillP = 0.5; }
             if (typeof obj.strokeBase === 'undefined') { obj.strokeBase = obj.strokeColor || '#1B1D1C'; obj.strokeP = 0.5; }
             obj._appInit = true;
+        }
+
+        // ============================================================
+        //  GLOBAL FILL / OUTLINE TOGGLES (toolbar)
+        //  Turn fill and/or outline on for ALL routes at once. When a
+        //  channel is switched on, its colour is auto-picked from the
+        //  active palette and is guaranteed to differ from the other
+        //  channel (fill never matches outline). Per-route fine-tuning
+        //  still happens in the colour dock; these are the shortcut.
+        // ============================================================
+        let gFillOn = true, gOutlineOn = false;
+        function absPaths() { return fabricCanvas ? fabricCanvas.getObjects().filter(o => o.isPath) : []; }
+        function paletteColorList() {
+            return (activePalette && activePalette.colors)
+                ? activePalette.colors.concat(activePalette.extended || [])
+                : ['#1B1D1C', '#888888'];
+        }
+        function pickDistinctColor(avoidHex) {
+            const list = paletteColorList(), a = (avoidHex || '').toLowerCase();
+            return list.find(c => (c || '').toLowerCase() !== a) || list[0] || '#888888';
+        }
+        function syncGlobalToggles() {
+            const paths = absPaths();
+            if (paths.length) { gFillOn = paths.some(o => o.fillOn); gOutlineOn = paths.some(o => o.strokeOn); }
+            const fb = document.getElementById('toggleFillBtn'), ob = document.getElementById('toggleOutlineBtn');
+            if (fb) fb.setAttribute('aria-pressed', gFillOn ? 'true' : 'false');
+            if (ob) ob.setAttribute('aria-pressed', gOutlineOn ? 'true' : 'false');
+        }
+        function setGlobalChannel(ch, on) {
+            // Never let both channels go off — that would hide the art.
+            if (!on) { const other = ch === 'fill' ? gOutlineOn : gFillOn; if (!other) { syncGlobalToggles(); return; } }
+            if (ch === 'fill') gFillOn = on; else gOutlineOn = on;
+            absPaths().forEach(o => {
+                ensureAppearance(o);
+                if (ch === 'fill') {
+                    o.fillOn = on;
+                    if (on && (!o.fillColor || (o.strokeOn && (o.fillColor || '').toLowerCase() === (o.strokeColor || '').toLowerCase()))) {
+                        const c = pickDistinctColor(o.strokeColor); o.fillColor = c; o.fillBase = c; o.fillP = 0.5;
+                    }
+                } else {
+                    o.strokeOn = on;
+                    if (on) {
+                        if (!o.strokeColor || (o.strokeColor || '').toLowerCase() === (o.fillColor || '').toLowerCase()) {
+                            const c = pickDistinctColor(o.fillColor || o.paletteBase); o.strokeColor = c; o.strokeBase = c; o.strokeP = 0.5;
+                        }
+                        if (!o.strokeW) o.strokeW = DEFAULT_STROKE_W;
+                    }
+                }
+                if (!o.fillOn && !o.strokeOn) { o.fillOn = true; }   // safety
+                applyAppearance(o);
+            });
+            if (fabricCanvas) fabricCanvas.renderAll();
+            refreshRouteSwatches();
+            if (typeof renderDock === 'function') renderDock(dockMode, dockShapeObj, dockPickChannel);
+            syncGlobalToggles();
+            pushHistory();
+        }
+        // Enforce the current global fill/outline intent on freshly generated art.
+        function applyGlobalChannels() {
+            const paths = absPaths(); if (!paths.length) { syncGlobalToggles(); return; }
+            paths.forEach(o => {
+                ensureAppearance(o);
+                if (gOutlineOn && !o.strokeOn) {
+                    const c = pickDistinctColor(o.fillColor || o.paletteBase);
+                    o.strokeColor = c; o.strokeBase = c; o.strokeP = 0.5; if (!o.strokeW) o.strokeW = DEFAULT_STROKE_W; o.strokeOn = true;
+                }
+                if (!gFillOn && o.fillOn) o.fillOn = false;
+                if (!o.fillOn && !o.strokeOn) o.fillOn = true;   // safety
+                applyAppearance(o);
+            });
+            if (fabricCanvas) fabricCanvas.renderAll();
+            syncGlobalToggles();
+        }
+        {
+            const fb = document.getElementById('toggleFillBtn'), ob = document.getElementById('toggleOutlineBtn');
+            if (fb) fb.addEventListener('click', () => setGlobalChannel('fill', fb.getAttribute('aria-pressed') !== 'true'));
+            if (ob) ob.addEventListener('click', () => setGlobalChannel('stroke', ob.getAttribute('aria-pressed') !== 'true'));
+        }
+
+        // ============================================================
+        //  SESSION MEMORY — persist the Abstract artwork across reloads
+        //  (parity with Topo). We save the rendered canvas (the art itself),
+        //  the palette, background, fill/outline state, geometry, and the
+        //  Routes-panel metadata. The original uploaded GPX File can't survive
+        //  a reload, so a cold-restored session keeps the artwork + editing +
+        //  recolour + export, but Reshuffle is disabled until a new upload.
+        //  Best-effort: wrapped in try/catch (private mode / quota just skip).
+        // ============================================================
+        const LS_ABS = 'gpxsketch_abs_session_v1';
+        let absSaveTimer = null;
+        let absRestored = false;
+        function absFileMeta() {
+            return loadedFiles.map(f => ({
+                routeUid: f.routeUid, name: f.name, displayName: f.displayName,
+                gpxSource: f.gpxSource, routeHidden: f.routeHidden === true,
+                originalFileOrder: f.originalFileOrder, meta: f.meta || null
+            }));
+        }
+        function saveAbs() {
+            try {
+                if (!fabricCanvas || !artGenerated) return;
+                const art = JSON.stringify({ portrait: isPortrait, w: fabricCanvas.width, h: fabricCanvas.height, canvas: fabricCanvas.toJSON(HISTORY_PROPS) });
+                localStorage.setItem(LS_ABS, JSON.stringify({
+                    v: 1, art, paletteName: activePalette && activePalette.name, bgOverride,
+                    gFillOn, gOutlineOn, ratio: canvasRatio, portrait: isPortrait, files: absFileMeta()
+                }));
+            } catch (e) { /* best-effort */ }
+        }
+        function saveAbsSoon() { clearTimeout(absSaveTimer); absSaveTimer = setTimeout(saveAbs, 600); }
+        function clearAbs() { try { localStorage.removeItem(LS_ABS); } catch (e) {} }
+        function restoreAbs() {
+            let raw; try { raw = localStorage.getItem(LS_ABS); } catch (e) { return false; }
+            if (!raw) return false;
+            let d; try { d = JSON.parse(raw); } catch (e) { return false; }
+            if (!d || d.v !== 1 || !d.art) return false;
+            let art; try { art = JSON.parse(d.art); } catch (e) { return false; }
+            try {
+                if (d.paletteName) { const p = EXPANDED_PALETTES.find(x => x.name === d.paletteName); if (p) activePalette = p; }
+                bgOverride = d.bgOverride || null;
+                if (d.ratio && d.ratio.w && d.ratio.h) canvasRatio = d.ratio;
+                if (typeof d.portrait === 'boolean') isPortrait = d.portrait;
+                if (typeof d.gFillOn === 'boolean') gFillOn = d.gFillOn;
+                if (typeof d.gOutlineOn === 'boolean') gOutlineOn = d.gOutlineOn;
+                loadedFiles = (d.files || []).map(f => ({ ...f }));
+                let maxN = 0; loadedFiles.forEach(f => { const m = /^rt(\d+)$/.exec(f.routeUid || ''); if (m) maxN = Math.max(maxN, +m[1]); });
+                routeUidCounter = Math.max(routeUidCounter, maxN);
+                absRestored = loadedFiles.length > 0;
+                suppressHistory = true;
+                if (art.w && art.h) fabricCanvas.setDimensions({ width: art.w, height: art.h }, { backstoreOnly: true });
+                fabricCanvas.loadFromJSON(art.canvas, () => {
+                    fabricCanvas.getObjects().forEach(o => {
+                        if (o.isPath) { const it = o.visible !== false && isAdvancedEditingActive; o.selectable = it; o.evented = it; o.setCoords(); }
+                    });
+                    artGenerated = true;
+                    fitCanvasToViewport(); fabricCanvas.calcOffset(); fabricCanvas.renderAll();
+                    updatePaletteButton(); updateBgControl(); syncGlobalToggles();
+                    updateControlsForObject(null); selectedRouteUid = null;
+                    renderRouteList(); renderRouteStats();
+                    if (typeof renderDock === 'function') renderDock('palette');
+                    if (absRestored && reshuffleButton) {
+                        reshuffleButton.disabled = true;
+                        reshuffleButton.title = 'Re-upload a route to reshuffle — a restored session keeps the artwork but not the original GPX file';
+                    }
+                    suppressHistory = false;
+                    resetHistory();
+                });
+                return true;
+            } catch (e) { console.warn('[ABS] restore failed:', e.message); suppressHistory = false; return false; }
         }
 
         function updateControlsForObject(obj) {
@@ -19511,6 +19678,8 @@ if(!restoreSession()) loadDefaultRoute();
             updateBgControl();
             updateControlsForObject(null);
             renderRouteList();
+            // Bring back the last session's artwork if one was saved (parity with Topo).
+            try { restoreAbs(); } catch (e) { /* fall through to empty state */ }
             // Awaited so the query-param handling below knows whether the
             // sign-in actually took before deciding to reopen the picker.
             await detectRealStrava();
@@ -19715,8 +19884,9 @@ if(!restoreSession()) loadDefaultRoute();
             });
             
             paintPalette(activePalette);   // assign palette slots so the color dock maps cleanly
+            applyGlobalChannels();         // honour the toolbar Fill/Outline toggles on fresh art
             fabricCanvas.renderAll();
-            clearSelection(); 
+            clearSelection();
             selectedRouteUid = null;
             renderRouteList();             // row miniatures pick up the assigned colours
             renderRouteStats();
