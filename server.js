@@ -5,7 +5,7 @@ console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.22.0';
+const BUILD = 'v0.24.0';
 console.log('[boot] build', BUILD);
 
 /**
@@ -19,6 +19,24 @@ console.log('[boot] build', BUILD);
  */
 
 try { require('dotenv').config(); } catch(e) { console.warn('[boot] dotenv not found, skipping:', e.message); }
+
+// ---------------------------------------------------------------------------
+// Canonical domain — keep the site, its links, and Strava OAuth on ONE host
+// (e.g. gpxsketch.io) instead of the raw *.onrender.com URL.
+//
+// Set ONE env var on Render:  CANONICAL_HOST=gpxsketch.io  (no protocol).
+// It seeds BASE_URL / FRONTEND_URL — which routes/strava.js uses to build the
+// Strava redirect_uri and the post-login redirect — and drives the redirect
+// middleware below. Leave it UNSET until the custom domain + DNS + SSL are
+// live on Render, otherwise the old URL would 301 to a domain that isn't ready.
+// ---------------------------------------------------------------------------
+const CANONICAL_HOST = (process.env.CANONICAL_HOST || '').trim()
+  .replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
+if (CANONICAL_HOST) {
+  if (!process.env.BASE_URL)     process.env.BASE_URL     = 'https://' + CANONICAL_HOST;
+  if (!process.env.FRONTEND_URL) process.env.FRONTEND_URL = 'https://' + CANONICAL_HOST;
+  console.log('[boot] canonical host:', CANONICAL_HOST);
+}
 
 let express, cors, session;
 try {
@@ -79,6 +97,18 @@ const app = express();
 // Render terminates SSL at the load balancer — trust the proxy so secure
 // cookies work (otherwise the browser won't send them over HTTPS).
 app.set('trust proxy', 1);
+
+// Force the canonical host in production so links + Strava OAuth never bounce
+// to the raw *.onrender.com URL. Skipped for localhost, health checks, and when
+// CANONICAL_HOST is unset (so this is a no-op until you opt in).
+if (CANONICAL_HOST) {
+  app.use((req, res, next) => {
+    const host = (req.hostname || '').toLowerCase();
+    if (host === CANONICAL_HOST || host === 'localhost' || host === '127.0.0.1'
+        || req.path === '/health' || req.path === '/healthz') return next();
+    return res.redirect(301, 'https://' + CANONICAL_HOST + req.originalUrl);
+  });
+}
 
 app.use(cors(corsOptions));
 app.use(express.json());
