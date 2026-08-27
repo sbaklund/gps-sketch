@@ -154,6 +154,14 @@
     border-radius:var(--r-lg); padding:14px 15px; box-shadow:var(--card-shadow); }
   .group > .label{ font-size:var(--fs-label); letter-spacing:var(--ls-label); text-transform:uppercase; color:var(--text-dim); display:flex; align-items:center; gap:var(--gap); margin-bottom:12px; font-family:var(--mono); font-weight:500; }
   .group > .label::after{ content:""; flex:1; height:1px; background:var(--card-line); }
+  /* label row that carries a control on the right (e.g. the theme dice) */
+  .group > .label.labelrow{ justify-content:space-between; }
+  .group > .label.labelrow::after{ display:none; }
+  .diceBtn{ background:var(--card-inset); border:1px solid var(--rail-line); border-radius:var(--r-sm);
+    cursor:pointer; font-size:13px; line-height:1; padding:4px 7px; color:var(--text);
+    transition:border-color .12s, transform .05s; }
+  .diceBtn:hover{ border-color:var(--accent); }
+  .diceBtn:active{ transform:rotate(-18deg) scale(.94); }
   /* nested controls drop to the inset tone so they read as sunken in the card */
   .group .preset, .group .cswatch, .group #pickerWrap,
   .group .field input[type=text], .group .field select,
@@ -1458,7 +1466,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.24.0', date: '2026-08-26' };
+    window.__BUILD__ = { html: 'v0.25.0', date: '2026-08-26' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1529,7 +1537,7 @@
     </div>
 
     <div class="group">
-      <div class="label">Themes</div>
+      <div class="label labelrow">Themes<button type="button" class="diceBtn" id="diceTheme" title="Surprise me — random theme" aria-label="Random theme">&#127922;</button></div>
       <div id="signaturePane" class="presets"></div>
       <div class="morewrap">
         <button class="btn" id="moreBtn"><span id="moreBtnLabel">More themes</span><span id="moreCount" style="color:var(--accent);font-weight:600;"></span></button>
@@ -1578,6 +1586,8 @@
         <button type="button" data-rw="3.4">Medium</button>
         <button type="button" data-rw="6">Bold</button>
       </div>
+      <div class="row" style="margin-top:14px;"><label for="routeZoom">Map zoom</label><span class="val" id="routeZoomVal">35%</span></div>
+      <input type="range" id="routeZoom" min="0" max="1" step="0.02" value="0.35">
     </div>
 
     <div class="group">
@@ -16672,9 +16682,13 @@ function paletteNaturalDark(p){
 const MAP={x:80,y:80,w:740,h:900};
 const GW=185,GH=225,S_MIN=240,S_MAX=6400,MILES_PER_GRID=5.4/GW;
 const R_W=340,R_H=414;
+/* Terrain is framed with generous margin around the route so the Map-zoom slider
+   can pull all the way "out" to ~half-canvas and still show terrain everywhere.
+   The zoom is then a pure visual scale (≥1) about the route centre — see render(). */
+const FRAME_PAD=0.5;
 
 let state={ preset:SIGNATURE[0], themeRef:{type:'sig',key:'relief'}, mode:SIGNATURE[0].mode,
- interval:200, weight:1.0, routeWidth:3.4, showRoute:true, darkPoster:false,
+ interval:200, weight:1.0, routeWidth:3.4, routeZoom:0.35, showRoute:true, darkPoster:false,
  bgOverride:null, lineOverride:null, seed:7 };
 let TER=null, route=null, routeStats=null, routeSmooth=true;
 let currentIsDefault=false;   // true while showing the built-in Wonderland default
@@ -16854,13 +16868,32 @@ function render(){
  if(!TER) return; const P=state.preset, BG=bgColor(), LN=lineColor(), INK=inkColor();
  svg.selectAll('*').remove();
  svg.append('rect').attr('width',900).attr('height',1200).attr('fill',BG);
- const sc=`translate(${MAP.x},${MAP.y}) scale(${MAP.w/TER.w},${MAP.h/TER.h})`;
+ const sc0=`translate(${MAP.x},${MAP.y}) scale(${MAP.w/TER.w},${MAP.h/TER.h})`;
  svg.append('clipPath').attr('id','mapclip').append('rect').attr('width',TER.w).attr('height',TER.h);
+ /* Map zoom — a visual scale about the route's centre. Clamped ≥1 so the terrain
+    (and its base layer) always cover the map box; zooming in pushes the route out
+    toward the edges, "out" (Z=1) sits at the wide, generously-framed view. */
+ /* routeZoom is 0..1 (slider). We map it to a target route-fill fraction of the
+    map box — ~50% at 0 ("out"), ~95% at 1 ("in") — then derive the scale from the
+    route's own size so it hits that target regardless of route shape or the
+    (quantised) fetch zoom. Clamped ≥1 so terrain always covers the map box. */
+ let Z=1, zt='';
+ if(route&&route.length>1){
+  let xa=Infinity,xb=-Infinity,ya=Infinity,yb=-Infinity;
+  for(const p of route){ if(p[0]<xa)xa=p[0]; if(p[0]>xb)xb=p[0]; if(p[1]<ya)ya=p[1]; if(p[1]>yb)yb=p[1]; }
+  const zx=(xa+xb)/2, zy=(ya+yb)/2;
+  const f0=Math.max((xb-xa)/TER.w,(yb-ya)/TER.h,0.05);   // route's natural fraction of the frame
+  const t=Math.max(0,Math.min(1, state.routeZoom==null?0.35:state.routeZoom));
+  Z=(0.5+0.45*t)/f0; if(Z<1) Z=1;
+  if(Math.abs(Z-1)>0.001) zt=`translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`;
+ }
+ const mapG=svg.append('g').attr('transform',sc0).attr('clip-path','url(#mapclip)');
+ const zoomG=zt ? mapG.append('g').attr('transform',zt) : mapG;
  if(TER.data){
   const rampFn=d3.interpolateRgbBasis(P.ramp.length>1?P.ramp:[P.ramp[0],P.ramp[0]]);
   const lo=TER.minFt,hi=TER.maxFt,span=(hi-lo)||1,levels=d3.range(lo+state.interval,hi,state.interval);
   const contours=d3.contours().size([TER.w,TER.h]).thresholds(levels)(TER.data),geo=d3.geoPath();
-  const g=svg.append('g').attr('transform',sc).attr('clip-path','url(#mapclip)');
+  const g=zoomG.append('g');
   const doFill=state.mode==='fill'||state.mode==='both', doLine=state.mode==='line'||state.mode==='both';
   if(doFill){
    /* Base layer: the lowest ramp colour under everything. d3.contours only
@@ -16870,7 +16903,7 @@ function render(){
    g.append('rect').attr('width',TER.w).attr('height',TER.h).attr('fill',rampFn(0));
    g.append('g').selectAll('path').data(contours).join('path').attr('d',geo).attr('fill',d=>rampFn((d.value-lo)/span)).attr('stroke','none');
   }
-  if(doLine){ const wBase=state.weight/(MAP.w/TER.w);
+  if(doLine){ const wBase=state.weight/(MAP.w/TER.w)/Z;
    /* Lines-only is a two-colour piece, so the strokes go full strength. */
    const op = state.mode==='line' ? 1 : P.lineOp;
    g.append('g').selectAll('path').data(contours).join('path').attr('d',geo).attr('fill','none')
@@ -16881,10 +16914,10 @@ function render(){
   let pts=route;
   if(pts.length>2500){ const step=Math.ceil(pts.length/2000); pts=route.filter((_,i)=>i%step===0); if(pts[pts.length-1]!==route[route.length-1]) pts.push(route[route.length-1]); }
   const curve=routeSmooth?d3.curveCatmullRom.alpha(0.6):d3.curveLinear, line=d3.line().curve(curve).x(d=>d[0]).y(d=>d[1]);
-  const rg=svg.append('g').attr('transform',sc).attr('clip-path','url(#mapclip)'), w=state.routeWidth/(MAP.w/TER.w);
+  const rg=zoomG.append('g'), w=state.routeWidth/(MAP.w/TER.w)/Z;
   rg.append('path').attr('d',line(pts)).attr('fill','none').attr('stroke',BG).attr('stroke-opacity',0.6).attr('stroke-width',w*2.1).attr('stroke-linecap','round').attr('stroke-linejoin','round');
   rg.append('path').attr('d',line(pts)).attr('fill','none').attr('stroke',P.route).attr('stroke-width',w).attr('stroke-linecap','round').attr('stroke-linejoin','round');
-  const r=(state.routeWidth*1.24)/(MAP.w/TER.w);
+  const r=(state.routeWidth*1.24)/(MAP.w/TER.w)/Z;
   rg.append('circle').attr('cx',route[0][0]).attr('cy',route[0][1]).attr('r',r).attr('fill',P.route);
   rg.append('circle').attr('cx',route[route.length-1][0]).attr('cy',route[route.length-1][1]).attr('r',r).attr('fill',BG).attr('stroke',P.route).attr('stroke-width',r*0.5);
  }
@@ -16921,7 +16954,7 @@ function rebuildSynthetic(){ TER=buildSynthetic(state.seed); route=buildRoute(TE
    ============================================================ */
 const HIST_MAX=60; let hist=[], histIdx=-1, histLock=false, histTimer=null;
 function snap(){ return JSON.stringify({ themeRef:state.themeRef, mode:state.mode, interval:state.interval,
- weight:state.weight, routeWidth:state.routeWidth, showRoute:state.showRoute, darkPoster:state.darkPoster,
+ weight:state.weight, routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, darkPoster:state.darkPoster,
  bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed,
  title:document.getElementById('title').value, subtitle:document.getElementById('subtitle').value }); }
 function pushHist(){ if(histLock) return; const s=snap(); if(hist[histIdx]===s) return;
@@ -16952,6 +16985,7 @@ function themeFromRef(ref){ return themeForMode(ref,state.darkPoster); }
 function restore(s){ const o=JSON.parse(s); histLock=true;
  state.themeRef=o.themeRef; state.mode=o.mode; state.interval=o.interval; state.weight=o.weight;
  if(o.routeWidth!=null) state.routeWidth=o.routeWidth;
+ if(o.routeZoom!=null) state.routeZoom=o.routeZoom;
  state.showRoute=o.showRoute; state.darkPoster=o.darkPoster; state.bgOverride=o.bgOverride;
  state.lineOverride=o.lineOverride;
  const seedChanged = state.seed!==o.seed; state.seed=o.seed;
@@ -16961,6 +16995,9 @@ function restore(s){ const o=JSON.parse(s); histLock=true;
  document.getElementById('weight').value=state.weight; document.getElementById('weightVal').textContent=(+state.weight).toFixed(1);
  { const rwEl=document.getElementById('routeWidth'), rwv=document.getElementById('routeWidthVal');
    if(rwEl){ rwEl.value=state.routeWidth; rwv.textContent=(+state.routeWidth).toFixed(1); } }
+ { const rzEl=document.getElementById('routeZoom');
+   if(rzEl){ rzEl.value=state.routeZoom; document.getElementById('routeZoomVal').textContent=Math.round((+state.routeZoom)*100)+'%'; } }
+ if(typeof syncRoutePresets==='function') syncRoutePresets();
  document.getElementById('showRoute').checked=state.showRoute;
  syncMode(); syncPosterMode(); markSelectedTheme(); buildColorsUI(); render();
  histLock=false; updateHistUI(); }
@@ -17020,6 +17057,18 @@ function buildThemeUI(){
 document.getElementById('moreBtn').onclick=e=>{ e.stopPropagation(); document.getElementById('moreDrop').classList.toggle('open'); };
 document.getElementById('moreDrop').onclick=e=>e.stopPropagation();
 document.addEventListener('click',()=>document.getElementById('moreDrop').classList.remove('open'));
+/* Dice — jump to a random theme (signature or palette), never the current one. */
+function randomTheme(){
+ const all=[...SIGNATURE.map(p=>({type:'sig',key:p.key})), ...PALETTES.map(p=>({type:'pal',name:p.n}))];
+ if(!all.length) return;
+ const curKey = state.themeRef && state.themeRef.type==='sig' ? 'sig:'+state.themeRef.key
+              : state.themeRef ? 'pal:'+state.themeRef.name : '';
+ let pick=all[0];
+ for(let i=0;i<10;i++){ const c=all[Math.floor(Math.random()*all.length)];
+  const k=c.type==='sig'?'sig:'+c.key:'pal:'+c.name; if(k!==curKey){ pick=c; break; } pick=c; }
+ applyTheme(pick);
+}
+{ const dt=document.getElementById('diceTheme'); if(dt) dt.onclick=randomTheme; }
 
 
 /* ---------- Colors panel (swatches + inline picker) ---------- */
@@ -17184,6 +17233,8 @@ document.querySelectorAll('#routePresets button').forEach(b=>{
   rwv.textContent=state.routeWidth.toFixed(1); syncRoutePresets(); render(); pushHist(); };
 });
 syncRoutePresets();
+const rz=document.getElementById('routeZoom'),rzv=document.getElementById('routeZoomVal');
+rz.oninput=()=>{ state.routeZoom=+rz.value; rzv.textContent=Math.round(+rz.value*100)+'%'; render(); pushHistSoon(); };
 document.getElementById('showRoute').onchange=e=>{ state.showRoute=e.target.checked; render(); pushHist(); };
 document.getElementById('title').oninput=()=>{ titleAuto=false; render(); pushHistSoon(); };
 document.getElementById('subtitle').oninput=()=>{ subtitleAuto=false; render(); pushHistSoon(); };
@@ -17305,7 +17356,7 @@ async function loadStravaActivity(id,name){
   if(!points || points.length<2) throw new Error('no GPS points on this activity');
   currentIsDefault=false; rawGpx=points.map(p=>({lat:p[1],lon:p[0],ele:null})); gpxBbox=bboxOf(rawGpx); gpxHasEle=false;
   document.getElementById('gpxName').textContent=`${name} · ${rawGpx.length.toLocaleString()} pts (from Strava)`;
-  const fr=frameFromBbox(gpxBbox,0.18);
+  const fr=frameFromBbox(gpxBbox,FRAME_PAD);
   console.log('[TOPO] frame:', fr, '— calling loadRouteFrame');
   // Auto-fill title + smart subtitle (unless the user typed their own)
   const t0=document.getElementById('title');
@@ -17385,7 +17436,7 @@ document.getElementById('gpxInput').onchange=async e=>{
  try{ const text=await f.text(); const pts=parseGpx(text);
   currentIsDefault=false; rawGpx=pts; gpxBbox=bboxOf(pts); gpxHasEle=pts.some(p=>p.ele!=null);
   document.getElementById('gpxName').textContent=`${f.name} · ${pts.length.toLocaleString()} pts${gpxHasEle?' · has elevation':''}`;
-  const fr=frameFromBbox(gpxBbox,0.18);
+  const fr=frameFromBbox(gpxBbox,FRAME_PAD);
   const t0=document.getElementById('title'); if(titleAuto){ t0.value=f.name.replace(/\.(gpx|xml)$/i,'').replace(/[_-]/g,' ').toUpperCase(); }
   reverseGeocode(fr.centerLat, fr.centerLon, routeHighPoint(rawGpx));
   await loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom);
@@ -17422,7 +17473,7 @@ function loadDefaultRoute(){
   if(t) t.value='Wonderland Trail';
   if(sub) sub.value='Mt Rainier National Park';
   const gn=document.getElementById('gpxName'); if(gn) gn.textContent='Wonderland Trail · '+rawGpx.length.toLocaleString()+' pts · has elevation';
-  const fr=frameFromBbox(gpxBbox,0.18);
+  const fr=frameFromBbox(gpxBbox,FRAME_PAD);
   return loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom).then(()=>{ hist=[]; histIdx=-1; pushHist(); updateHistUI(); });
  }catch(e){ console.warn('[TOPO] default route load failed:', e.message); }
 }
@@ -17453,7 +17504,7 @@ function saveSession(){
    gpxName:document.getElementById('gpxName').textContent,
    lat:TER.lat, lon:TER.lon, zoom:TER.zoom, intervalAuto,
    state:{ themeRef:state.themeRef, mode:state.mode, interval:state.interval, weight:state.weight,
-    routeWidth:state.routeWidth, showRoute:state.showRoute, darkPoster:state.darkPoster,
+    routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, darkPoster:state.darkPoster,
     bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed } };
   localStorage.setItem(LS_TOPO, JSON.stringify(d));
  }catch(e){ /* private mode / quota / disabled — persistence is best-effort */ }
@@ -17472,6 +17523,7 @@ function restoreSession(){
   if(s.interval!=null) state.interval=s.interval;
   if(s.weight!=null) state.weight=s.weight;
   if(s.routeWidth!=null) state.routeWidth=s.routeWidth;
+  if(s.routeZoom!=null) state.routeZoom=s.routeZoom;
   if(s.showRoute!=null) state.showRoute=s.showRoute;
   if(s.darkPoster!=null) state.darkPoster=s.darkPoster;
   state.bgOverride=s.bgOverride??null; state.lineOverride=s.lineOverride??null;
@@ -17484,6 +17536,8 @@ function restoreSession(){
   document.getElementById('interval').value=state.interval; document.getElementById('intervalVal').textContent=state.interval+' ft';
   document.getElementById('weight').value=state.weight; document.getElementById('weightVal').textContent=(+state.weight).toFixed(1);
   { const rwEl=document.getElementById('routeWidth'); if(rwEl){ rwEl.value=state.routeWidth; document.getElementById('routeWidthVal').textContent=(+state.routeWidth).toFixed(1); } }
+  { const rzEl=document.getElementById('routeZoom'); if(rzEl){ rzEl.value=state.routeZoom; document.getElementById('routeZoomVal').textContent=Math.round((+state.routeZoom)*100)+'%'; } }
+  if(typeof syncRoutePresets==='function') syncRoutePresets();
   syncMode(); buildColorsUI(); syncPosterMode(); if(typeof markSelectedTheme==='function') markSelectedTheme();
   if(d.isDefault || !d.route || d.route.length<2){
    currentIsDefault=true; rawGpx=DEFAULT_ROUTE_GPX.map(p=>({lat:p[0],lon:p[1],ele:p[2]})); gpxHasEle=true;
@@ -17499,13 +17553,15 @@ function restoreSession(){
 function resetToDefault(){
  clearSession();
  state.themeRef={type:'sig',key:'relief'}; state.mode=SIGNATURE[0].mode;
- state.interval=200; state.weight=1.0; state.routeWidth=3.4; state.showRoute=true;
+ state.interval=200; state.weight=1.0; state.routeWidth=3.4; state.routeZoom=0.35; state.showRoute=true;
  state.bgOverride=null; state.lineOverride=null; state.seed=7; intervalAuto=true;
  state.darkPoster=naturalDarkFor(state.themeRef);
  state.preset=themeForMode(state.themeRef, state.darkPoster); state.preset.mode=state.mode;
  document.getElementById('interval').value=200; document.getElementById('intervalVal').textContent='200 ft';
  document.getElementById('weight').value=1.0; document.getElementById('weightVal').textContent='1.0';
  { const rwEl=document.getElementById('routeWidth'); if(rwEl){ rwEl.value=3.4; document.getElementById('routeWidthVal').textContent='3.4'; } }
+ { const rzEl=document.getElementById('routeZoom'); if(rzEl){ rzEl.value=0.35; document.getElementById('routeZoomVal').textContent='35%'; } }
+ if(typeof syncRoutePresets==='function') syncRoutePresets();
  syncMode(); buildColorsUI(); syncPosterMode(); if(typeof markSelectedTheme==='function') markSelectedTheme();
  loadDefaultRoute();
  msg('ok','Reset to the default map.');
