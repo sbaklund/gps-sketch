@@ -1,5 +1,5 @@
 // ======================================================================
-//  GPX Sketch  —  SERVER BUILD  v0.31.0
+//  GPX Sketch  —  SERVER BUILD  v0.32.0
 //  Keep in sync with window.__BUILD__.html (frontend) and VERSION.txt.
 // ======================================================================
 'use strict';
@@ -9,7 +9,7 @@ console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.31.0';
+const BUILD = 'v0.32.0';
 console.log('[boot] build', BUILD);
 
 /**
