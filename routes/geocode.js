@@ -15,6 +15,9 @@
  *   6. County, Full State       → "Boulder County, Colorado"
  *   7. State / Region           → "Colorado"  (full region name, US or intl.)
  *
+ * GET /api/geocode/search?q=            (forward search — Place/Explore mode)
+ *   → { q, results:[{ name, context, displayName, lat, lon, bbox, type, class }] }
+ *
  * lat/lon   = route centroid (used for tiers 1-3, 5-7)
  * hilat/hilon = route's highest point (optional; used only for tier 4)
  *
@@ -133,7 +136,16 @@ function cleanName(s) {
   return String(s).replace(/\s+/g, ' ').trim();
 }
 
-// ---- route --------------------------------------------------------------
+// A short "context" line for a search hit: "<region>, <country>" without
+// repeating the place's own name. Used as the poster subtitle in Place mode.
+function contextOf(g) {
+  const a = g.address || {};
+  const region = a.state || a.region || a.province || a.county || '';
+  const country = a.country || '';
+  return cleanName([region, country].filter(Boolean).join(', '));
+}
+
+// ---- route: reverse (subtitle ladder) -----------------------------------
 router.get('/', async (req, res) => {
   const lat = parseFloat(req.query.lat);
   const lon = parseFloat(req.query.lon);
@@ -163,6 +175,53 @@ router.get('/', async (req, res) => {
   } catch (e) {
     console.error('[geocode] error:', e.message);
     res.status(502).json({ error: e.message, subtitle: '' });
+  }
+});
+
+// ---- route: forward search (Place / Explore mode) -----------------------
+// GET /api/geocode/search?q=<place name>
+// Returns up to 5 matches with coordinates + a bounding box so the client can
+// frame the poster. Same Nominatim client + disk cache + compliant UA.
+router.get('/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.status(400).json({ error: 'q required', results: [] });
+  if (q.length > 120) return res.status(400).json({ error: 'query too long', results: [] });
+
+  const cacheKey = 'search:' + q.toLowerCase();
+  if (cache[cacheKey]) return res.json(cache[cacheKey]);
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}`
+      + `&format=jsonv2&limit=5&addressdetails=1&namedetails=1&accept-language=en`;
+    const r = await fetch(url, { headers: { 'User-Agent': UA } });
+    if (!r.ok) throw new Error(`nominatim ${r.status}`);
+    const arr = await r.json();
+
+    const results = (Array.isArray(arr) ? arr : []).map(g => {
+      const name = (g.namedetails && (g.namedetails.name || g.namedetails['name:en']))
+        || g.name || (g.display_name || '').split(',')[0] || q;
+      const bb = (g.boundingbox || []).map(Number);
+      const hasBox = bb.length === 4 && bb.every(Number.isFinite);
+      return {
+        name: cleanName(name),
+        context: contextOf(g),
+        displayName: g.display_name || '',
+        lat: parseFloat(g.lat),
+        lon: parseFloat(g.lon),
+        // Nominatim boundingbox order is [south, north, west, east].
+        bbox: hasBox ? { minLat: bb[0], maxLat: bb[1], minLon: bb[2], maxLon: bb[3] } : null,
+        type: g.type || '',
+        class: g.category || g.class || '',
+      };
+    }).filter(x => isFinite(x.lat) && isFinite(x.lon));
+
+    const out = { q, results };
+    cache[cacheKey] = out;
+    saveCache();
+    res.json(out);
+  } catch (e) {
+    console.error('[geocode/search] error:', e.message);
+    res.status(502).json({ error: e.message, results: [] });
   }
 });
 
