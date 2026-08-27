@@ -25,8 +25,14 @@ const path    = require('path');
 
 const router = express.Router();
 
-const UA = 'GPXSketch/1.0 (route-art poster generator)';
-const OVERPASS = 'https://overpass-api.de/api/interpreter';
+const UA = 'GPXSketch/1.0 (route-art poster generator; contact via gpxsketch)';
+// Several public Overpass mirrors — we try them in order so one being down or
+// rate-limiting doesn't kill the overlay.
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
 const CACHE_DIR = path.join(__dirname, '..', 'cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'features-cache.json');
 
@@ -109,23 +115,42 @@ function parseOverpass(json) {
   return { polys, lines };
 }
 
-async function fetchOverpass(query) {
+// POST one Overpass mirror with the canonical `data=` form encoding. Returns
+// parsed JSON, or throws with a helpful message (status + a snippet of the body,
+// which is where Overpass puts its "rate_limited" / syntax errors).
+async function postOverpass(url, query) {
   const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-  const to = ctrl ? setTimeout(() => ctrl.abort(), 30000) : null;
+  const to = ctrl ? setTimeout(() => ctrl.abort(), 25000) : null;
   try {
-    const res = await fetch(OVERPASS, {
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain', 'User-Agent': UA },
-      body: query,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
+      body: 'data=' + encodeURIComponent(query),
       signal: ctrl ? ctrl.signal : undefined,
     });
     if (to) clearTimeout(to);
-    if (!res.ok) throw new Error(`overpass ${res.status}`);
-    return res.json();
+    const text = await res.text();
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 160).replace(/\s+/g, ' ')}`);
+    try { return JSON.parse(text); }
+    catch { throw new Error(`non-JSON reply: ${text.slice(0, 160).replace(/\s+/g, ' ')}`); }
   } catch (e) {
     if (to) clearTimeout(to);
     throw e;
   }
+}
+
+async function fetchOverpass(query) {
+  let lastErr;
+  for (const url of OVERPASS_MIRRORS) {
+    try {
+      const json = await postOverpass(url, query);
+      return json;
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[features] overpass mirror failed (${url}): ${e.message}`);
+    }
+  }
+  throw lastErr || new Error('all overpass mirrors failed');
 }
 
 router.get('/', async (req, res) => {
@@ -137,8 +162,8 @@ router.get('/', async (req, res) => {
   if (s > n) [s, n] = [n, s];
   if (w > e) [w, e] = [e, w];
 
-  // Guard against absurdly large queries (whole-continent bboxes).
-  if ((n - s) > 1.2 || (e - w) > 1.2) {
+  // Guard against absurdly large queries (whole-continent / very-zoomed-out).
+  if ((n - s) > 1.6 || (e - w) > 1.6) {
     return res.json({ bbox: [s, w, n, e], polys: [], lines: [], note: 'area too large for feature overlay' });
   }
 
@@ -154,9 +179,10 @@ router.get('/', async (req, res) => {
     saveCache();
     res.json(out);
   } catch (err) {
-    console.error('[features] error:', err.message);
-    // Soft-fail: the poster is fine without the overlay.
-    res.status(502).json({ bbox: [s, w, n, e], polys: [], lines: [], error: err.message });
+    console.error('[features] all overpass mirrors failed:', err.message);
+    // Soft-fail with 200 so the client treats it as "no overlay right now"
+    // rather than a scary network error; the poster is fine without it.
+    res.json({ bbox: [s, w, n, e], polys: [], lines: [], error: 'overpass unavailable' });
   }
 });
 
