@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.32.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.33.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -1478,7 +1478,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.32.0', date: '2026-08-27' };
+    window.__BUILD__ = { html: 'v0.33.0', date: '2026-08-27' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1620,6 +1620,8 @@
       <div class="field"><label for="title">Title</label><input type="text" id="title" value=""></div>
       <div class="field"><label for="subtitle">Subtitle</label><input type="text" id="subtitle" value=""></div>
       <p class="note">Auto-filled from Strava. Edit anytime.</p>
+      <label class="toggle" style="margin-top:6px;"><input type="checkbox" id="showStats" checked><span>Show stats line</span></label>
+      <label class="toggle"><input type="checkbox" id="showCoords" checked><span>Show coordinates</span></label>
     </div>
 
     <div class="group">
@@ -16719,7 +16721,7 @@ const FRAME_PAD=0.5;
 
 let state={ preset:SIGNATURE[0], themeRef:{type:'sig',key:'relief'}, mode:SIGNATURE[0].mode,
  interval:200, weight:1.0, routeWidth:3.4, routeZoom:0.35, showRoute:true, darkPoster:false,
- bgOverride:null, lineOverride:null, seed:7, showWater:false };
+ bgOverride:null, lineOverride:null, seed:7, showWater:false, showStats:true, showCoords:true };
 let TER=null, route=null, routeStats=null, routeSmooth=true;
 let currentIsDefault=false;   // true while showing the built-in Wonderland default
 let placeMode=false;          // true = Place/Explore mode (a searched location, no route overlay)
@@ -17121,10 +17123,11 @@ function render(){
  const cx=450,L=svg.append('g'),FF='Inter, sans-serif';
  const TL=topoTitleLayout(document.getElementById('title').value);
  const two=TL.lines.length>1;
- /* One line keeps the original position exactly; two lines lift the first
-    line up (still clearing the map) and reflow everything below into the
-    poster's bottom margin. `base` is the baseline of the LAST title line. */
- const firstY=two?1016:1032, base=two?1054:1032, lineGap=38;
+ /* TITLE_PAD adds breathing room between the map and the title. One line keeps
+    the original spacing (+pad); two lines lift the first line up and reflow the
+    rest down into the bottom margin. `base` is the baseline of the LAST title line. */
+ const TITLE_PAD=16;
+ const firstY=(two?1016:1032)+TITLE_PAD, base=(two?1054:1032)+TITLE_PAD, lineGap=38;
  TL.lines.forEach((ln,i)=>{
   L.append('text').attr('x',cx).attr('y',firstY+i*lineGap).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','800').attr('font-size',TL.fontPx).attr('letter-spacing','2').attr('fill',INK).text(ln);
  });
@@ -17148,6 +17151,8 @@ function render(){
   statLine = terrainStatus==='failed' ? 'ELEVATION UNAVAILABLE' : 'LOADING TERRAIN…';
   coordLine = coordStr();
  } else { statLine='LOADING ROUTE…'; coordLine=''; }
+ if(state.showStats===false) statLine='';       // "choose what info shows" toggles
+ if(state.showCoords===false) coordLine='';
  L.append('text').attr('x',cx).attr('y',base+82).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','600').attr('font-size','15.5').attr('letter-spacing','1.5').attr('fill',INK).text(statLine);
  L.append('text').attr('x',cx).attr('y',base+108).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','12').attr('letter-spacing','2').attr('fill',INK).attr('opacity',0.6).text(coordLine);
 }
@@ -17163,7 +17168,7 @@ function rebuildSynthetic(){ TER=buildSynthetic(state.seed); route=buildRoute(TE
    ============================================================ */
 const HIST_MAX=60; let hist=[], histIdx=-1, histLock=false, histTimer=null;
 function snap(){ return JSON.stringify({ themeRef:state.themeRef, mode:state.mode, interval:state.interval,
- weight:state.weight, routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, darkPoster:state.darkPoster,
+ weight:state.weight, routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, showStats:state.showStats, showCoords:state.showCoords, darkPoster:state.darkPoster,
  bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed,
  title:document.getElementById('title').value, subtitle:document.getElementById('subtitle').value }); }
 function pushHist(){ if(histLock) return; const s=snap(); if(hist[histIdx]===s) return;
@@ -17211,6 +17216,8 @@ function restore(s){ const o=JSON.parse(s); histLock=true;
  if(o.showWater!=null){ const changed=state.showWater!==o.showWater; state.showWater=o.showWater;
    const wt=document.getElementById('showWater'); if(wt) wt.checked=!!o.showWater;
    if(changed && typeof updateFeatures==='function'){ if(o.showWater) updateFeatures(); else featData=null; } }
+ if(o.showStats!=null){ state.showStats=o.showStats; const el=document.getElementById('showStats'); if(el) el.checked=!!o.showStats; }
+ if(o.showCoords!=null){ state.showCoords=o.showCoords; const el=document.getElementById('showCoords'); if(el) el.checked=!!o.showCoords; }
  syncMode(); syncPosterMode(); markSelectedTheme(); buildColorsUI(); render();
  histLock=false; updateHistUI(); }
 function undo(){ if(histIdx>0){ histIdx--; restore(hist[histIdx]); } }
@@ -17575,6 +17582,8 @@ function waterColors(){ return state.darkPoster ? { fill:'#33566a', line:'#6fa9c
  }
 }
 document.getElementById('showRoute').onchange=e=>{ state.showRoute=e.target.checked; render(); pushHist(); };
+{ const ss=document.getElementById('showStats'); if(ss) ss.onchange=e=>{ state.showStats=e.target.checked; render(); if(typeof saveSessionSoon==='function') saveSessionSoon(); pushHist(); }; }
+{ const sc=document.getElementById('showCoords'); if(sc) sc.onchange=e=>{ state.showCoords=e.target.checked; render(); if(typeof saveSessionSoon==='function') saveSessionSoon(); pushHist(); }; }
 document.getElementById('title').oninput=()=>{ titleAuto=false; render(); pushHistSoon(); };
 document.getElementById('subtitle').oninput=()=>{ subtitleAuto=false; render(); pushHistSoon(); };
 
@@ -17944,7 +17953,7 @@ function saveSession(){
    gpxName:document.getElementById('gpxName').textContent,
    lat:TER.lat, lon:TER.lon, zoom:TER.zoom, intervalAuto,
    state:{ themeRef:state.themeRef, mode:state.mode, interval:state.interval, weight:state.weight,
-    routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, darkPoster:state.darkPoster,
+    routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, showStats:state.showStats, showCoords:state.showCoords, darkPoster:state.darkPoster,
     bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed } };
   localStorage.setItem(LS_TOPO, JSON.stringify(d));
  }catch(e){ /* private mode / quota / disabled — persistence is best-effort */ }
@@ -17966,6 +17975,8 @@ function restoreSession(){
   if(s.routeZoom!=null) state.routeZoom=s.routeZoom;
   if(s.showRoute!=null) state.showRoute=s.showRoute;
   if(s.showWater!=null){ state.showWater=s.showWater; const wt=document.getElementById('showWater'); if(wt) wt.checked=!!s.showWater; }
+  if(s.showStats!=null){ state.showStats=s.showStats; const el=document.getElementById('showStats'); if(el) el.checked=!!s.showStats; }
+  if(s.showCoords!=null){ state.showCoords=s.showCoords; const el=document.getElementById('showCoords'); if(el) el.checked=!!s.showCoords; }
   if(s.darkPoster!=null) state.darkPoster=s.darkPoster;
   state.bgOverride=s.bgOverride??null; state.lineOverride=s.lineOverride??null;
   if(s.seed!=null) state.seed=s.seed;
@@ -18007,6 +18018,7 @@ function resetToDefault(){
  state.themeRef={type:'sig',key:'relief'}; state.mode=SIGNATURE[0].mode;
  state.interval=200; state.weight=1.0; state.routeWidth=3.4; state.routeZoom=0.35; state.showRoute=true;
  state.showWater=false; featData=null; { const wt=document.getElementById('showWater'); if(wt) wt.checked=false; const fn=document.getElementById('featNote'); if(fn) fn.textContent=''; }
+ state.showStats=true; state.showCoords=true; { const a=document.getElementById('showStats'); if(a) a.checked=true; const b=document.getElementById('showCoords'); if(b) b.checked=true; }
  state.bgOverride=null; state.lineOverride=null; state.seed=7; intervalAuto=true;
  state.darkPoster=naturalDarkFor(state.themeRef);
  state.preset=themeForMode(state.themeRef, state.darkPoster); state.preset.mode=state.mode;
