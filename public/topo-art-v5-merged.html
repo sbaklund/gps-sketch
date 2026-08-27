@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.29.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.31.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -1478,7 +1478,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.29.0', date: '2026-08-27' };
+    window.__BUILD__ = { html: 'v0.31.0', date: '2026-08-27' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1607,6 +1607,12 @@
       </div>
       <div class="row" style="margin-top:14px;"><label for="routeZoom">Map zoom</label><span class="val" id="routeZoomVal">35%</span></div>
       <input type="range" id="routeZoom" min="0" max="1" step="0.02" value="0.35">
+    </div>
+
+    <div class="group">
+      <div class="label">Map features</div>
+      <label class="toggle"><input type="checkbox" id="showWater"><span>Water — lakes &amp; rivers</span></label>
+      <div id="featNote" class="note"></div>
     </div>
 
     <div class="group">
@@ -16713,7 +16719,7 @@ const FRAME_PAD=0.5;
 
 let state={ preset:SIGNATURE[0], themeRef:{type:'sig',key:'relief'}, mode:SIGNATURE[0].mode,
  interval:200, weight:1.0, routeWidth:3.4, routeZoom:0.35, showRoute:true, darkPoster:false,
- bgOverride:null, lineOverride:null, seed:7 };
+ bgOverride:null, lineOverride:null, seed:7, showWater:false };
 let TER=null, route=null, routeStats=null, routeSmooth=true;
 let currentIsDefault=false;   // true while showing the built-in Wonderland default
 let placeMode=false;          // true = Place/Explore mode (a searched location, no route overlay)
@@ -16786,6 +16792,16 @@ const lon2tileX=(lon,z)=>(lon+180)/360*Math.pow(2,z);
 const lat2tileY=(lat,z)=>{ const r=lat*Math.PI/180; return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z); };
 function makeFrame(la,lo,z){ const wx=lon2tileX(lo,z)*256, wy=lat2tileY(la,z)*256;
  return {data:null,w:R_W,h:R_H,minFt:0,maxFt:1,kind:'route',left:wx-R_W/2,top:wy-R_H/2,zoom:z,lat:la,lon:lo,hasElev:false}; }
+/* Inverse Web-Mercator — world pixels back to lat/lon, for Place-mode pan/zoom. */
+const tileX2lon=(tx,z)=> tx/Math.pow(2,z)*360-180;
+const tileY2lat=(ty,z)=>{ const n=Math.PI*(1-2*ty/Math.pow(2,z)); return Math.atan(Math.sinh(n))*180/Math.PI; };
+/* Place-mode camera: the "Map zoom" slider (0..1) maps to an integer tile-zoom
+   band. Effective zoom is continuous; render fetches at floor(eff) and applies a
+   small visual scale (2^frac, always ≥1 so there's never an edge gap) to smooth
+   between levels. Pan/zoom refetch keeps floor(eff) == TER.zoom. */
+const PLACE_ZMIN=8, PLACE_ZMAX=15;
+const zoomFromT=t=> PLACE_ZMIN + Math.max(0,Math.min(1,t))*(PLACE_ZMAX-PLACE_ZMIN);
+const tFromZoom=z=> (Math.max(PLACE_ZMIN,Math.min(PLACE_ZMAX,z))-PLACE_ZMIN)/(PLACE_ZMAX-PLACE_ZMIN);
 
 /* ---------- backend terrain fetch ---------- */
 // BACKEND_URL: empty in production (same-origin, single service).
@@ -17022,15 +17038,20 @@ function render(){
   Z=(0.5+0.45*t)/f0; if(Z<1) Z=1;
   if(Math.abs(Z-1)>0.001) zt=`translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`;
  } else if(placeMode){
-  /* No route to frame against, so the "Map zoom" slider zooms about the frame
-     centre instead — 0 shows the whole fetched area, higher tightens in. Keeps
-     the existing control meaningful in Place mode without adding a new one. */
-  const t=Math.max(0,Math.min(1, state.routeZoom==null?0.35:state.routeZoom));
-  Z=1+2*t;
+  /* Place mode is a live camera: the "Map zoom" slider sets a continuous
+     effective tile-zoom; terrain is fetched at floor(eff) (see reframePlace) and
+     the fractional part becomes a small visual scale (2^frac ∈ [1,2)) about the
+     frame centre — always ≥1, so zooming never opens an edge gap. */
+  const eff=zoomFromT(state.routeZoom==null?0.35:state.routeZoom);
+  Z=Math.pow(2, eff-TER.zoom); if(Z<1) Z=1;
   if(Math.abs(Z-1)>0.001){ const zx=TER.w/2, zy=TER.h/2; zt=`translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`; }
  }
- const mapG=svg.append('g').attr('transform',sc0).attr('clip-path','url(#mapclip)');
+ /* #viewport wraps the whole (clipped) map box so a live pan drag can translate
+    it as a unit without disturbing the poster labels below. */
+ const viewport=svg.append('g').attr('id','viewport');
+ const mapG=viewport.append('g').attr('transform',sc0).attr('clip-path','url(#mapclip)');
  const zoomG=zt ? mapG.append('g').attr('transform',zt) : mapG;
+ svg.node().style.cursor = placeMode ? 'grab' : '';
  if(TER.data){
   const rampFn=d3.interpolateRgbBasis(P.ramp.length>1?P.ramp:[P.ramp[0],P.ramp[0]]);
   const lo=TER.minFt,hi=TER.maxFt,span=(hi-lo)||1,levels=d3.range(lo+state.interval,hi,state.interval);
@@ -17051,6 +17072,23 @@ function render(){
    g.append('g').selectAll('path').data(contours).join('path').attr('d',geo).attr('fill','none')
     .attr('stroke',LN).attr('stroke-opacity',op)
     .attr('stroke-width',d=>(Math.round((d.value-lo)/state.interval)%5===0?wBase*2.1:wBase)).attr('stroke-linejoin','round'); }
+ }
+ /* Water overlay (F1) — drawn over the terrain so lakes/rivers read as water,
+    under the route line. Projected into TER space with the frame math; only
+    drawn when the fetched data matches the current frame (no stale geometry). */
+ if(state.showWater && featData && featData.frameKey===frameKey() && (featData.polys.length||featData.lines.length)){
+  const wc=waterColors();
+  const toPath=(coords,close)=>{ let d='';
+   for(let i=0;i<coords.length;i++){ const x=lon2tileX(coords[i][0],TER.zoom)*256-TER.left, y=lat2tileY(coords[i][1],TER.zoom)*256-TER.top; d+=(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); }
+   return close ? d+'Z' : d; };
+  const wg=zoomG.append('g');
+  for(const poly of featData.polys){ if(poly.length<3) continue;
+   wg.append('path').attr('d',toPath(poly,true)).attr('fill',wc.fill).attr('fill-opacity',0.92)
+    .attr('stroke',wc.line).attr('stroke-width',0.7/(MAP.w/TER.w)/Z).attr('stroke-opacity',0.7).attr('stroke-linejoin','round'); }
+  const lw=1.7/(MAP.w/TER.w)/Z;
+  for(const ln of featData.lines){ if(ln.length<2) continue;
+   wg.append('path').attr('d',toPath(ln,false)).attr('fill','none').attr('stroke',wc.line).attr('stroke-width',lw)
+    .attr('stroke-linecap','round').attr('stroke-linejoin','round').attr('stroke-opacity',0.9); }
  }
  if(state.showRoute&&route&&route.length>1){
   let pts=route;
@@ -17108,7 +17146,7 @@ function rebuildSynthetic(){ TER=buildSynthetic(state.seed); route=buildRoute(TE
    ============================================================ */
 const HIST_MAX=60; let hist=[], histIdx=-1, histLock=false, histTimer=null;
 function snap(){ return JSON.stringify({ themeRef:state.themeRef, mode:state.mode, interval:state.interval,
- weight:state.weight, routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, darkPoster:state.darkPoster,
+ weight:state.weight, routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, darkPoster:state.darkPoster,
  bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed,
  title:document.getElementById('title').value, subtitle:document.getElementById('subtitle').value }); }
 function pushHist(){ if(histLock) return; const s=snap(); if(hist[histIdx]===s) return;
@@ -17153,6 +17191,9 @@ function restore(s){ const o=JSON.parse(s); histLock=true;
    if(rzEl){ rzEl.value=state.routeZoom; document.getElementById('routeZoomVal').textContent=Math.round((+state.routeZoom)*100)+'%'; } }
  if(typeof syncRoutePresets==='function') syncRoutePresets();
  document.getElementById('showRoute').checked=state.showRoute;
+ if(o.showWater!=null){ const changed=state.showWater!==o.showWater; state.showWater=o.showWater;
+   const wt=document.getElementById('showWater'); if(wt) wt.checked=!!o.showWater;
+   if(changed && typeof updateFeatures==='function'){ if(o.showWater) updateFeatures(); else featData=null; } }
  syncMode(); syncPosterMode(); markSelectedTheme(); buildColorsUI(); render();
  histLock=false; updateHistUI(); }
 function undo(){ if(histIdx>0){ histIdx--; restore(hist[histIdx]); } }
@@ -17387,7 +17428,120 @@ document.querySelectorAll('#routePresets button').forEach(b=>{
 });
 syncRoutePresets();
 const rz=document.getElementById('routeZoom'),rzv=document.getElementById('routeZoomVal');
-rz.oninput=()=>{ state.routeZoom=+rz.value; rzv.textContent=Math.round(+rz.value*100)+'%'; render(); pushHistSoon(); };
+rz.oninput=()=>{ if(placeMode){ setPlaceZoomT(+rz.value); pushHistSoon(); return; }
+ state.routeZoom=+rz.value; rzv.textContent=Math.round(+rz.value*100)+'%'; render(); pushHistSoon(); };
+
+/* ---------- Place-mode live camera: zoom (slider / wheel) + drag-to-pan ---------- */
+let placeZoomTimer=null;
+/* Re-fetch terrain for a new Place frame WITHOUT the intervalAuto reset that
+   loadRouteFrame does — so panning/zooming keeps a manually-set contour interval.
+   The Chunk-D race guard in tryLoadTerrain makes rapid pans/zooms safe. */
+async function reframePlace(lat,lon,zoom){
+ placeMode=true; TER=makeFrame(lat,lon,zoom); route=null; routeStats=null;
+ crossfade();
+ if(typeof saveSessionSoon==='function') saveSessionSoon();
+ await tryLoadTerrain();
+}
+function setPlaceZoomT(t){
+ t=Math.max(0,Math.min(1,t));
+ state.routeZoom=t; rz.value=t;
+ rzv.textContent='z'+Math.round(zoomFromT(t));
+ render();                                        // instant visual (fractional scale)
+ clearTimeout(placeZoomTimer);
+ placeZoomTimer=setTimeout(()=>{
+  if(!placeMode||!TER) return;
+  const target=Math.floor(zoomFromT(state.routeZoom)+1e-9);
+  if(target!==TER.zoom) reframePlace(TER.lat,TER.lon,target);
+ }, 260);
+}
+{
+ const posterEl=document.getElementById('poster');
+ const MAPX=MAP.x,MAPY=MAP.y,MAPW=MAP.w,MAPH=MAP.h;
+ const posterPt=e=>{ const r=posterEl.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*900, y:(e.clientY-r.top)/r.height*1200, rw:r.width, rh:r.height }; };
+ const inMap=(x,y)=> x>=MAPX&&x<=MAPX+MAPW&&y>=MAPY&&y<=MAPY+MAPH;
+ // Wheel to zoom (one tile-zoom step per notch), anchored on the frame centre.
+ posterEl.addEventListener('wheel', e=>{
+  if(!placeMode||!TER) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
+  e.preventDefault();
+  const step=(e.deltaY<0?1:-1)/(PLACE_ZMAX-PLACE_ZMIN);
+  setPlaceZoomT(state.routeZoom+step);
+ }, {passive:false});
+ // Drag to pan.
+ let panning=false, pan0=null, panD=null;
+ posterEl.addEventListener('pointerdown', e=>{
+  if(!placeMode||!TER) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
+  panning=true; pan0={cx:e.clientX,cy:e.clientY,rw:p.rw,rh:p.rh}; panD={dx:0,dy:0};
+  try{ posterEl.setPointerCapture(e.pointerId); }catch(_){}
+  posterEl.style.cursor='grabbing'; e.preventDefault();
+ });
+ posterEl.addEventListener('pointermove', e=>{
+  if(!panning) return;
+  const dx=(e.clientX-pan0.cx)/pan0.rw*900, dy=(e.clientY-pan0.cy)/pan0.rh*1200;
+  panD={dx,dy};
+  const vp=document.getElementById('viewport'); if(vp) vp.setAttribute('transform',`translate(${dx},${dy})`);
+ });
+ const endPan=e=>{
+  if(!panning) return; panning=false; posterEl.style.cursor='grab';
+  try{ posterEl.releasePointerCapture(e.pointerId); }catch(_){}
+  const vp=document.getElementById('viewport'); if(vp) vp.removeAttribute('transform');
+  const d=panD||{dx:0,dy:0};
+  if(Math.abs(d.dx)<2 && Math.abs(d.dy)<2) return;   // a click, not a drag
+  const sx=MAP.w/TER.w, sy=MAP.h/TER.h;
+  const Z=Math.max(1, Math.pow(2, zoomFromT(state.routeZoom)-TER.zoom));
+  const worldDx=d.dx/sx/Z, worldDy=d.dy/sy/Z;        // poster→TER px→world px (÷ visual zoom)
+  const wx=lon2tileX(TER.lon,TER.zoom)*256 - worldDx;
+  const wy=lat2tileY(TER.lat,TER.zoom)*256 - worldDy;
+  reframePlace(tileY2lat(wy/256,TER.zoom), tileX2lon(wx/256,TER.zoom), TER.zoom); // note: (lat,lon,zoom)
+ };
+ posterEl.addEventListener('pointerup', endPan);
+ posterEl.addEventListener('pointercancel', endPan);
+}
+/* Small read-only hook for debugging/support (and headless tests): current frame. */
+window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMode } : null;
+
+/* ==========================================================================
+   MAP FEATURES (F1: water) — optional themed overlay of lakes / rivers /
+   coastline. Geometry comes from /api/features (source-agnostic contract);
+   we project it with the same frame math as the terrain and draw it inside
+   the map viewport, so it pans/zooms with everything else. Off by default.
+   ========================================================================== */
+const featCache=new Map(); let featData=null, featReq=0, featTimer=null;
+function frameKey(){ return TER ? (TER.lat.toFixed(4)+','+TER.lon.toFixed(4)+','+TER.zoom) : ''; }
+function frameGeoBbox(){
+ if(!TER) return null; const z=TER.zoom;
+ return { s:tileY2lat((TER.top+TER.h)/256,z), w:tileX2lon(TER.left/256,z),
+          n:tileY2lat(TER.top/256,z),        e:tileX2lon((TER.left+TER.w)/256,z) };
+}
+async function updateFeatures(){
+ const note=document.getElementById('featNote');
+ if(!state.showWater || !TER){ featData=null; if(note) note.textContent=''; render(); return; }
+ const bb=frameGeoBbox(); if(!bb) return;
+ const key=[bb.s,bb.w,bb.n,bb.e].map(v=>v.toFixed(3)).join(',');
+ if(featCache.has(key)){ featData={...featCache.get(key), frameKey:frameKey()}; if(note) note.textContent=''; render(); return; }
+ const seq=++featReq; if(note) note.textContent='Loading water…';
+ try{
+  const res=await fetch(`${BACKEND_URL}/api/features?bbox=${bb.s},${bb.w},${bb.n},${bb.e}&layers=water`, {cache:'no-store'});
+  if(seq!==featReq) return;                          // a newer frame superseded this
+  if(!res.ok) throw new Error('features '+res.status);
+  const data=await res.json();
+  const rec={ polys:data.polys||[], lines:data.lines||[] };
+  featCache.set(key,rec);
+  featData={...rec, frameKey:frameKey()};
+  if(note) note.textContent = (rec.polys.length+rec.lines.length) ? '' : 'No water features in view.';
+  render();
+ }catch(e){ if(seq===featReq){ featData=null; if(note) note.textContent='Water data unavailable — the map is still fine.'; render(); } }
+}
+function updateFeaturesSoon(){ clearTimeout(featTimer); featTimer=setTimeout(updateFeatures,350); }
+function waterColors(){ return state.darkPoster ? { fill:'#33566a', line:'#6fa9c4' } : { fill:'#b9d4e3', line:'#6f9fba' }; }
+{
+ const wt=document.getElementById('showWater');
+ if(wt){ wt.checked=!!state.showWater;
+  wt.onchange=e=>{ state.showWater=e.target.checked;
+   if(state.showWater) updateFeatures();
+   else { featData=null; const note=document.getElementById('featNote'); if(note) note.textContent=''; render(); }
+   if(typeof saveSessionSoon==='function') saveSessionSoon(); if(typeof pushHist==='function') pushHist(); };
+ }
+}
 document.getElementById('showRoute').onchange=e=>{ state.showRoute=e.target.checked; render(); pushHist(); };
 document.getElementById('title').oninput=()=>{ titleAuto=false; render(); pushHistSoon(); };
 document.getElementById('subtitle').oninput=()=>{ subtitleAuto=false; render(); pushHistSoon(); };
@@ -17445,7 +17599,8 @@ async function tryLoadTerrain(){
   const tag=cached?' (cached)':'';
   if(routeStats) msg('ok',`Loaded${tag} · route ${routeStats.miles.toFixed(1)} mi${routeStats.gain!=null?' · +'+Math.round(routeStats.gain).toLocaleString()+' ft':''}.`);
   else msg('ok',`Loaded${tag} · ${Math.round(minFt).toLocaleString()}–${Math.round(maxFt).toLocaleString()} ft.`); crossfade();
-  if(typeof saveSessionSoon==='function') saveSessionSoon(); };
+  if(typeof saveSessionSoon==='function') saveSessionSoon();
+  if(state.showWater && typeof updateFeaturesSoon==='function') updateFeaturesSoon(); };
  if(terrainCache.has(key)){ const c=terrainCache.get(key); applyElev(c.rawData,true); return; }
  busy.classList.add('on'); document.getElementById('retryElev').disabled=true; terrainStatus='loading'; msg('','Creating map…');
  /* 'auto' — the server tries its best available source and falls back
@@ -17524,7 +17679,8 @@ async function loadStravaActivity(id,name){
   console.log('[TOPO] got', points?.length, 'points from server');
   if(!points || points.length<2) throw new Error('no GPS points on this activity');
   currentIsDefault=false; placeMode=false; rawGpx=points.map(p=>({lat:p[1],lon:p[0],ele:null})); gpxBbox=bboxOf(rawGpx); gpxHasEle=false;
-  { const ps=document.getElementById('placeSearch'); if(ps) ps.value=''; const pn=document.getElementById('placeNote'); if(pn) pn.textContent=''; if(typeof clearPlaceResults==='function') clearPlaceResults(); }
+  { const ps=document.getElementById('placeSearch'); if(ps) ps.value=''; const pn=document.getElementById('placeNote'); if(pn) pn.textContent=''; if(typeof clearPlaceResults==='function') clearPlaceResults();
+    const rzvEl=document.getElementById('routeZoomVal'); if(rzvEl) rzvEl.textContent=Math.round((state.routeZoom||0)*100)+'%'; }
   document.getElementById('gpxName').textContent=`${name} · ${rawGpx.length.toLocaleString()} pts (from Strava)`;
   const fr=frameFromBbox(gpxBbox,FRAME_PAD);
   console.log('[TOPO] frame:', fr, '— calling loadRouteFrame');
@@ -17605,7 +17761,8 @@ document.getElementById('gpxInput').onchange=async e=>{
  const f=e.target.files[0]; if(!f) return; msg('','Reading GPX…');
  try{ const text=await f.text(); const pts=parseGpx(text);
   currentIsDefault=false; placeMode=false; rawGpx=pts; gpxBbox=bboxOf(pts); gpxHasEle=pts.some(p=>p.ele!=null);
-  { const ps=document.getElementById('placeSearch'); if(ps) ps.value=''; const pn=document.getElementById('placeNote'); if(pn) pn.textContent=''; if(typeof clearPlaceResults==='function') clearPlaceResults(); }
+  { const ps=document.getElementById('placeSearch'); if(ps) ps.value=''; const pn=document.getElementById('placeNote'); if(pn) pn.textContent=''; if(typeof clearPlaceResults==='function') clearPlaceResults();
+    const rzvEl=document.getElementById('routeZoomVal'); if(rzvEl) rzvEl.textContent=Math.round((state.routeZoom||0)*100)+'%'; }
   document.getElementById('gpxName').textContent=`${f.name} · ${pts.length.toLocaleString()} pts${gpxHasEle?' · has elevation':''}`;
   const fr=frameFromBbox(gpxBbox,FRAME_PAD);
   const t0=document.getElementById('title'); if(titleAuto){ t0.value=f.name.replace(/\.(gpx|xml)$/i,'').replace(/[_-]/g,' ').toUpperCase(); }
@@ -17637,9 +17794,14 @@ function enterPlace(lat, lon, zoom, name, context){
  const sub=document.getElementById('subtitle'); if(sub){ sub.value=context||''; subtitleAuto=true; }
  const gn=document.getElementById('gpxName'); if(gn) gn.textContent = name ? ('📍 '+name) : ('📍 '+lat.toFixed(4)+', '+lon.toFixed(4));
  clearPlaceResults();
- const pn=document.getElementById('placeNote'); if(pn) pn.textContent='';
+ const pn=document.getElementById('placeNote'); if(pn) pn.textContent='Drag the map to pan · scroll to zoom.';
+ /* Point the "Map zoom" slider at this place's tile zoom so pan/zoom start crisp. */
+ const zc=Math.max(PLACE_ZMIN,Math.min(PLACE_ZMAX,Math.round(zoom)));
+ state.routeZoom=tFromZoom(zc);
+ { const rzEl=document.getElementById('routeZoom'); if(rzEl) rzEl.value=state.routeZoom;
+   const rzvEl=document.getElementById('routeZoomVal'); if(rzvEl) rzvEl.textContent='z'+zc; }
  msg('','Creating map…');
- loadRouteFrame(lat, lon, zoom);
+ loadRouteFrame(lat, lon, zc);
 }
 function pickPlace(r){
  let lat=r.lat, lon=r.lon, zoom=12;
@@ -17750,7 +17912,7 @@ function saveSession(){
    gpxName:document.getElementById('gpxName').textContent,
    lat:TER.lat, lon:TER.lon, zoom:TER.zoom, intervalAuto,
    state:{ themeRef:state.themeRef, mode:state.mode, interval:state.interval, weight:state.weight,
-    routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, darkPoster:state.darkPoster,
+    routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, darkPoster:state.darkPoster,
     bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed } };
   localStorage.setItem(LS_TOPO, JSON.stringify(d));
  }catch(e){ /* private mode / quota / disabled — persistence is best-effort */ }
@@ -17771,6 +17933,7 @@ function restoreSession(){
   if(s.routeWidth!=null) state.routeWidth=s.routeWidth;
   if(s.routeZoom!=null) state.routeZoom=s.routeZoom;
   if(s.showRoute!=null) state.showRoute=s.showRoute;
+  if(s.showWater!=null){ state.showWater=s.showWater; const wt=document.getElementById('showWater'); if(wt) wt.checked=!!s.showWater; }
   if(s.darkPoster!=null) state.darkPoster=s.darkPoster;
   state.bgOverride=s.bgOverride??null; state.lineOverride=s.lineOverride??null;
   if(s.seed!=null) state.seed=s.seed;
@@ -17811,6 +17974,7 @@ function resetToDefault(){
  { const ps=document.getElementById('placeSearch'); if(ps) ps.value=''; const pn=document.getElementById('placeNote'); if(pn) pn.textContent=''; if(typeof clearPlaceResults==='function') clearPlaceResults(); }
  state.themeRef={type:'sig',key:'relief'}; state.mode=SIGNATURE[0].mode;
  state.interval=200; state.weight=1.0; state.routeWidth=3.4; state.routeZoom=0.35; state.showRoute=true;
+ state.showWater=false; featData=null; { const wt=document.getElementById('showWater'); if(wt) wt.checked=false; const fn=document.getElementById('featNote'); if(fn) fn.textContent=''; }
  state.bgOverride=null; state.lineOverride=null; state.seed=7; intervalAuto=true;
  state.darkPoster=naturalDarkFor(state.themeRef);
  state.preset=themeForMode(state.themeRef, state.darkPoster); state.preset.mode=state.mode;
