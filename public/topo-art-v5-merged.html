@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.31.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.32.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -1478,7 +1478,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.31.0', date: '2026-08-27' };
+    window.__BUILD__ = { html: 'v0.32.0', date: '2026-08-27' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -16790,11 +16790,25 @@ function statsFromGridPts(t,pts){
 /* ---------- geo / GPX ---------- */
 const lon2tileX=(lon,z)=>(lon+180)/360*Math.pow(2,z);
 const lat2tileY=(lat,z)=>{ const r=lat*Math.PI/180; return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z); };
+/* OVERSCAN — we fetch a grid larger than the visible map (R_W×R_H) so panning
+   reveals terrain that's already loaded instead of loading "on the spot", and
+   so the water overlay is fetched once for the whole padded area. The visible
+   window is R_W×R_H; the fetched grid is OSCAN× that. `viewDX/viewDY` are the
+   window's offset inside the grid (centre by default; a drag slides them). */
+const OSCAN=1.5;
+const GRID_W=Math.round(R_W*OSCAN), GRID_H=Math.round(R_H*OSCAN);
 function makeFrame(la,lo,z){ const wx=lon2tileX(lo,z)*256, wy=lat2tileY(la,z)*256;
- return {data:null,w:R_W,h:R_H,minFt:0,maxFt:1,kind:'route',left:wx-R_W/2,top:wy-R_H/2,zoom:z,lat:la,lon:lo,hasElev:false}; }
+ const gw=GRID_W, gh=GRID_H;
+ return {data:null,w:gw,h:gh,minFt:0,maxFt:1,kind:'route',left:wx-gw/2,top:wy-gh/2,zoom:z,lat:la,lon:lo,hasElev:false,
+  viewDX:(gw-R_W)/2, viewDY:(gh-R_H)/2 }; }
 /* Inverse Web-Mercator — world pixels back to lat/lon, for Place-mode pan/zoom. */
 const tileX2lon=(tx,z)=> tx/Math.pow(2,z)*360-180;
 const tileY2lat=(ty,z)=>{ const n=Math.PI*(1-2*ty/Math.pow(2,z)); return Math.atan(Math.sinh(n))*180/Math.PI; };
+/* Display-window centre of a frame, in lat/lon (accounts for any pan offset). */
+function frameCenterLatLon(t){
+ const vx = t.viewDX!=null ? t.viewDX : 0, vy = t.viewDY!=null ? t.viewDY : 0;
+ const cx = t.left + vx + R_W/2, cy = t.top + vy + R_H/2;
+ return { lat: tileY2lat(cy/256, t.zoom), lon: tileX2lon(cx/256, t.zoom) }; }
 /* Place-mode camera: the "Map zoom" slider (0..1) maps to an integer tile-zoom
    band. Effective zoom is continuous; render fetches at floor(eff) and applies a
    small visual scale (2^frac, always ≥1 so there's never an edge gap) to smooth
@@ -16873,9 +16887,10 @@ function fillHoles(a, w, h, fallback) {
 async function fetchTerrain(frame, source) {
   const TILE = 256;
   const { left, top, zoom } = frame;
+  const GW = frame.w || R_W, GH = frame.h || R_H;   // grid (overscan) dimensions
   const scale = Math.pow(2, zoom), maxIdx = scale - 1;
-  const tx0 = Math.floor(left / TILE), tx1 = Math.floor((left + R_W - 1) / TILE);
-  const ty0 = Math.floor(top  / TILE), ty1 = Math.floor((top  + R_H - 1) / TILE);
+  const tx0 = Math.floor(left / TILE), tx1 = Math.floor((left + GW - 1) / TILE);
+  const ty0 = Math.floor(top  / TILE), ty1 = Math.floor((top  + GH - 1) / TILE);
 
   // Fetch + decode every covering tile in parallel.
   const tiles = {};
@@ -16911,27 +16926,27 @@ async function fetchTerrain(frame, source) {
   }
   const hasHoles = got < total;
 
-  // Sample the R_W×R_H output grid straight out of the tile mosaic.
-  const out = new Float64Array(R_W * R_H);
+  // Sample the GW×GH output grid straight out of the tile mosaic.
+  const out = new Float64Array(GW * GH);
   let min = Infinity, max = -Infinity;
-  for (let j = 0; j < R_H; j++) {
-    for (let i = 0; i < R_W; i++) {
+  for (let j = 0; j < GH; j++) {
+    for (let i = 0; i < GW; i++) {
       const wX = left + i, wY = top + j;
       const tx = Math.floor(wX / TILE), ty = Math.floor(wY / TILE);
       const px = tiles[tx + '_' + ty];
       if (px) {
         const lx = (wX - tx * TILE) | 0, ly = (wY - ty * TILE) | 0, o = (ly * TILE + lx) * 4;
         const ef = ((px[o] * 256 + px[o + 1] + px[o + 2] / 256) - 32768) * 3.28084;
-        out[j * R_W + i] = ef;
+        out[j * GW + i] = ef;
         if (ef < min) min = ef;
         if (ef > max) max = ef;
       } else {
-        out[j * R_W + i] = NaN;   // missing tile → hole, filled after the range is known
+        out[j * GW + i] = NaN;   // missing tile → hole, filled after the range is known
       }
     }
   }
   if (!(max > min)) throw new Error('No elevation range in tiles (flat or all water?).');
-  if (hasHoles) fillHoles(out, R_W, R_H, min);
+  if (hasHoles) fillHoles(out, GW, GH, min);
   return { data: out, minFt: min, maxFt: max };
 }
 function parseGpx(text){
@@ -17019,38 +17034,40 @@ function render(){
  if(!TER) return; const P=state.preset, BG=bgColor(), LN=lineColor(), INK=inkColor();
  svg.selectAll('*').remove();
  svg.append('rect').attr('width',900).attr('height',1200).attr('fill',BG);
- const sc0=`translate(${MAP.x},${MAP.y}) scale(${MAP.w/TER.w},${MAP.h/TER.h})`;
- svg.append('clipPath').attr('id','mapclip').append('rect').attr('width',TER.w).attr('height',TER.h);
- /* Map zoom — a visual scale about the route's centre. Clamped ≥1 so the terrain
-    (and its base layer) always cover the map box; zooming in pushes the route out
-    toward the edges, "out" (Z=1) sits at the wide, generously-framed view. */
- /* routeZoom is 0..1 (slider). We map it to a target route-fill fraction of the
-    map box — ~50% at 0 ("out"), ~95% at 1 ("in") — then derive the scale from the
-    route's own size so it hits that target regardless of route shape or the
-    (quantised) fetch zoom. Clamped ≥1 so terrain always covers the map box. */
+ /* Display window (R_W×R_H) vs. the fetched OVERSCAN grid (TER.w×TER.h). For a
+    real frame the terrain grid is larger than the visible box; `vDX/vDY` slide
+    the window inside it (a live pan). The synthetic default has no overscan, so
+    it falls back to showing its whole grid exactly as before. */
+ const DISPW = TER.viewDX!=null ? R_W : TER.w;
+ const DISPH = TER.viewDX!=null ? R_H : TER.h;
+ const vDX = TER.viewDX||0, vDY = TER.viewDY||0;
+ const sc0=`translate(${MAP.x},${MAP.y}) scale(${MAP.w/DISPW},${MAP.h/DISPH})`;
+ svg.append('clipPath').attr('id','mapclip').append('rect').attr('width',DISPW).attr('height',DISPH);
+ /* Map zoom — a visual scale. Route mode zooms about the route centre; Place
+    mode about the display-window centre. Clamped ≥1 so terrain always covers. */
  let Z=1, zt='';
  if(route&&route.length>1){
   let xa=Infinity,xb=-Infinity,ya=Infinity,yb=-Infinity;
   for(const p of route){ if(p[0]<xa)xa=p[0]; if(p[0]>xb)xb=p[0]; if(p[1]<ya)ya=p[1]; if(p[1]>yb)yb=p[1]; }
   const zx=(xa+xb)/2, zy=(ya+yb)/2;
-  const f0=Math.max((xb-xa)/TER.w,(yb-ya)/TER.h,0.05);   // route's natural fraction of the frame
+  const f0=Math.max((xb-xa)/DISPW,(yb-ya)/DISPH,0.05);   // route's fraction of the display window
   const t=Math.max(0,Math.min(1, state.routeZoom==null?0.35:state.routeZoom));
   Z=(0.5+0.45*t)/f0; if(Z<1) Z=1;
   if(Math.abs(Z-1)>0.001) zt=`translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`;
  } else if(placeMode){
   /* Place mode is a live camera: the "Map zoom" slider sets a continuous
-     effective tile-zoom; terrain is fetched at floor(eff) (see reframePlace) and
-     the fractional part becomes a small visual scale (2^frac ∈ [1,2)) about the
-     frame centre — always ≥1, so zooming never opens an edge gap. */
+     effective tile-zoom; terrain is fetched at floor(eff) and the fractional
+     part becomes a small visual scale (2^frac ∈ [1,2)) about the window centre. */
   const eff=zoomFromT(state.routeZoom==null?0.35:state.routeZoom);
-  Z=Math.pow(2, eff-TER.zoom); if(Z<1) Z=1;
-  if(Math.abs(Z-1)>0.001){ const zx=TER.w/2, zy=TER.h/2; zt=`translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`; }
+  Z=Math.pow(2, eff-TER.zoom); const minZ=R_W/GRID_W; if(Z<minZ) Z=minZ;   // zoom-out into the overscan margin
+  if(Math.abs(Z-1)>0.001){ const zx=vDX+R_W/2, zy=vDY+R_H/2; zt=`translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`; }
  }
- /* #viewport wraps the whole (clipped) map box so a live pan drag can translate
-    it as a unit without disturbing the poster labels below. */
- const viewport=svg.append('g').attr('id','viewport');
- const mapG=viewport.append('g').attr('transform',sc0).attr('clip-path','url(#mapclip)');
- const zoomG=zt ? mapG.append('g').attr('transform',zt) : mapG;
+ const mapG=svg.append('g').attr('transform',sc0).attr('clip-path','url(#mapclip)');
+ /* #panG slides the grid inside the clipped window — a live drag just updates
+    this one transform (no re-render), and the overscan margin means real terrain
+    scrolls into view instead of a blank edge. */
+ const panG=mapG.append('g').attr('id','panG').attr('transform',`translate(${-vDX},${-vDY})`);
+ const zoomG=panG.append('g').attr('id','zoomG'); if(zt) zoomG.attr('transform',zt);
  svg.node().style.cursor = placeMode ? 'grab' : '';
  if(TER.data){
   const rampFn=d3.interpolateRgbBasis(P.ramp.length>1?P.ramp:[P.ramp[0],P.ramp[0]]);
@@ -17066,7 +17083,7 @@ function render(){
    g.append('rect').attr('width',TER.w).attr('height',TER.h).attr('fill',rampFn(0));
    g.append('g').selectAll('path').data(contours).join('path').attr('d',geo).attr('fill',d=>rampFn((d.value-lo)/span)).attr('stroke','none');
   }
-  if(doLine){ const wBase=state.weight/(MAP.w/TER.w)/Z;
+  if(doLine){ const wBase=state.weight/(MAP.w/DISPW)/Z;
    /* Lines-only is a two-colour piece, so the strokes go full strength. */
    const op = state.mode==='line' ? 1 : P.lineOp;
    g.append('g').selectAll('path').data(contours).join('path').attr('d',geo).attr('fill','none')
@@ -17076,7 +17093,7 @@ function render(){
  /* Water overlay (F1) — drawn over the terrain so lakes/rivers read as water,
     under the route line. Projected into TER space with the frame math; only
     drawn when the fetched data matches the current frame (no stale geometry). */
- if(state.showWater && featData && featData.frameKey===frameKey() && (featData.polys.length||featData.lines.length)){
+ if(state.showWater && featData && featData.gridKey===gridKey() && (featData.polys.length||featData.lines.length)){
   const wc=waterColors();
   const toPath=(coords,close)=>{ let d='';
    for(let i=0;i<coords.length;i++){ const x=lon2tileX(coords[i][0],TER.zoom)*256-TER.left, y=lat2tileY(coords[i][1],TER.zoom)*256-TER.top; d+=(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); }
@@ -17084,8 +17101,8 @@ function render(){
   const wg=zoomG.append('g');
   for(const poly of featData.polys){ if(poly.length<3) continue;
    wg.append('path').attr('d',toPath(poly,true)).attr('fill',wc.fill).attr('fill-opacity',0.92)
-    .attr('stroke',wc.line).attr('stroke-width',0.7/(MAP.w/TER.w)/Z).attr('stroke-opacity',0.7).attr('stroke-linejoin','round'); }
-  const lw=1.7/(MAP.w/TER.w)/Z;
+    .attr('stroke',wc.line).attr('stroke-width',0.7/(MAP.w/DISPW)/Z).attr('stroke-opacity',0.7).attr('stroke-linejoin','round'); }
+  const lw=1.7/(MAP.w/DISPW)/Z;
   for(const ln of featData.lines){ if(ln.length<2) continue;
    wg.append('path').attr('d',toPath(ln,false)).attr('fill','none').attr('stroke',wc.line).attr('stroke-width',lw)
     .attr('stroke-linecap','round').attr('stroke-linejoin','round').attr('stroke-opacity',0.9); }
@@ -17094,10 +17111,10 @@ function render(){
   let pts=route;
   if(pts.length>2500){ const step=Math.ceil(pts.length/2000); pts=route.filter((_,i)=>i%step===0); if(pts[pts.length-1]!==route[route.length-1]) pts.push(route[route.length-1]); }
   const curve=routeSmooth?d3.curveCatmullRom.alpha(0.6):d3.curveLinear, line=d3.line().curve(curve).x(d=>d[0]).y(d=>d[1]);
-  const rg=zoomG.append('g'), w=state.routeWidth/(MAP.w/TER.w)/Z;
+  const rg=zoomG.append('g'), w=state.routeWidth/(MAP.w/DISPW)/Z;
   rg.append('path').attr('d',line(pts)).attr('fill','none').attr('stroke',BG).attr('stroke-opacity',0.6).attr('stroke-width',w*2.1).attr('stroke-linecap','round').attr('stroke-linejoin','round');
   rg.append('path').attr('d',line(pts)).attr('fill','none').attr('stroke',P.route).attr('stroke-width',w).attr('stroke-linecap','round').attr('stroke-linejoin','round');
-  const r=(state.routeWidth*1.24)/(MAP.w/TER.w)/Z;
+  const r=(state.routeWidth*1.24)/(MAP.w/DISPW)/Z;
   rg.append('circle').attr('cx',route[0][0]).attr('cy',route[0][1]).attr('r',r).attr('fill',P.route);
   rg.append('circle').attr('cx',route[route.length-1][0]).attr('cy',route[route.length-1][1]).attr('r',r).attr('fill',BG).attr('stroke',P.route).attr('stroke-width',r*0.5);
  }
@@ -17431,67 +17448,80 @@ const rz=document.getElementById('routeZoom'),rzv=document.getElementById('route
 rz.oninput=()=>{ if(placeMode){ setPlaceZoomT(+rz.value); pushHistSoon(); return; }
  state.routeZoom=+rz.value; rzv.textContent=Math.round(+rz.value*100)+'%'; render(); pushHistSoon(); };
 
-/* ---------- Place-mode live camera: zoom (slider / wheel) + drag-to-pan ---------- */
+/* ---------- Place-mode live camera: zoom (slider / wheel) + drag-to-pan ----------
+   Overscan makes both feel live: the terrain grid is bigger than the visible box,
+   so a drag just slides the grid inside the clip (one transform, no re-render, no
+   network) and a zoom scales the vector contours instantly. Terrain only refetches
+   when the window nears the grid edge (pan) or crosses a tile-zoom level (zoom). */
 let placeZoomTimer=null;
-/* Re-fetch terrain for a new Place frame WITHOUT the intervalAuto reset that
-   loadRouteFrame does — so panning/zooming keeps a manually-set contour interval.
-   The Chunk-D race guard in tryLoadTerrain makes rapid pans/zooms safe. */
+/* Fresh, centred overscan frame + refetch. Keeps a manual contour interval
+   (no intervalAuto reset); the Chunk-D race guard makes rapid calls safe. */
 async function reframePlace(lat,lon,zoom){
  placeMode=true; TER=makeFrame(lat,lon,zoom); route=null; routeStats=null;
  crossfade();
  if(typeof saveSessionSoon==='function') saveSessionSoon();
  await tryLoadTerrain();
 }
-function setPlaceZoomT(t){
+function placeZt(){ // current visual-zoom transform string about the window centre
+ const Z=Math.max(R_W/GRID_W, Math.pow(2, zoomFromT(state.routeZoom)-TER.zoom));
+ if(Math.abs(Z-1)<=0.001) return '';
+ const zx=(TER.viewDX||0)+R_W/2, zy=(TER.viewDY||0)+R_H/2;
+ return `translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`;
+}
+function setPlaceZoomT(t,{live=false}={}){
  t=Math.max(0,Math.min(1,t));
  state.routeZoom=t; rz.value=t;
  rzv.textContent='z'+Math.round(zoomFromT(t));
- render();                                        // instant visual (fractional scale)
+ if(live){ const zg=document.getElementById('zoomG'); if(zg){ const z=placeZt(); if(z) zg.setAttribute('transform',z); else zg.removeAttribute('transform'); } }
+ else render();
  clearTimeout(placeZoomTimer);
  placeZoomTimer=setTimeout(()=>{
   if(!placeMode||!TER) return;
   const target=Math.floor(zoomFromT(state.routeZoom)+1e-9);
   if(target!==TER.zoom) reframePlace(TER.lat,TER.lon,target);
- }, 260);
+  else render();     // normalise (crisp) once the gesture settles
+ }, 220);
 }
 {
  const posterEl=document.getElementById('poster');
- const MAPX=MAP.x,MAPY=MAP.y,MAPW=MAP.w,MAPH=MAP.h;
  const posterPt=e=>{ const r=posterEl.getBoundingClientRect(); return { x:(e.clientX-r.left)/r.width*900, y:(e.clientY-r.top)/r.height*1200, rw:r.width, rh:r.height }; };
- const inMap=(x,y)=> x>=MAPX&&x<=MAPX+MAPW&&y>=MAPY&&y<=MAPY+MAPH;
- // Wheel to zoom (one tile-zoom step per notch), anchored on the frame centre.
+ const inMap=(x,y)=> x>=MAP.x&&x<=MAP.x+MAP.w&&y>=MAP.y&&y<=MAP.y+MAP.h;
+ // Wheel to zoom — smaller steps + live transform, so it tracks the wheel.
  posterEl.addEventListener('wheel', e=>{
   if(!placeMode||!TER) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
   e.preventDefault();
-  const step=(e.deltaY<0?1:-1)/(PLACE_ZMAX-PLACE_ZMIN);
-  setPlaceZoomT(state.routeZoom+step);
+  const step=(e.deltaY<0?1:-1)*0.4/(PLACE_ZMAX-PLACE_ZMIN);   // ~0.4 tile-levels per notch
+  setPlaceZoomT(state.routeZoom+step,{live:true});
  }, {passive:false});
- // Drag to pan.
- let panning=false, pan0=null, panD=null;
+ // Drag to pan — slides the grid inside the clip live; refetch only at the edge.
+ let panning=false, pan0=null, moved=false;
  posterEl.addEventListener('pointerdown', e=>{
   if(!placeMode||!TER) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
-  panning=true; pan0={cx:e.clientX,cy:e.clientY,rw:p.rw,rh:p.rh}; panD={dx:0,dy:0};
+  panning=true; moved=false;
+  pan0={ cx:e.clientX, cy:e.clientY, rw:p.rw, rh:p.rh, vdx:TER.viewDX||0, vdy:TER.viewDY||0,
+         gpp:(R_W/MAP.w)/Math.max(R_W/GRID_W,Math.pow(2, zoomFromT(state.routeZoom)-TER.zoom)) }; // grid-px per poster-unit ÷ zoom
   try{ posterEl.setPointerCapture(e.pointerId); }catch(_){}
   posterEl.style.cursor='grabbing'; e.preventDefault();
  });
  posterEl.addEventListener('pointermove', e=>{
   if(!panning) return;
-  const dx=(e.clientX-pan0.cx)/pan0.rw*900, dy=(e.clientY-pan0.cy)/pan0.rh*1200;
-  panD={dx,dy};
-  const vp=document.getElementById('viewport'); if(vp) vp.setAttribute('transform',`translate(${dx},${dy})`);
+  const dPx=(e.clientX-pan0.cx)/pan0.rw*900, dPy=(e.clientY-pan0.cy)/pan0.rh*1200;
+  if(Math.abs(dPx)>2||Math.abs(dPy)>2) moved=true;
+  const maxX=Math.max(0,TER.w-R_W), maxY=Math.max(0,TER.h-R_H);
+  const vdx=Math.max(0,Math.min(maxX, pan0.vdx - dPx*pan0.gpp));
+  const vdy=Math.max(0,Math.min(maxY, pan0.vdy - dPy*pan0.gpp));
+  TER.viewDX=vdx; TER.viewDY=vdy;
+  const pg=document.getElementById('panG'); if(pg) pg.setAttribute('transform',`translate(${-vdx},${-vdy})`);
  });
  const endPan=e=>{
   if(!panning) return; panning=false; posterEl.style.cursor='grab';
   try{ posterEl.releasePointerCapture(e.pointerId); }catch(_){}
-  const vp=document.getElementById('viewport'); if(vp) vp.removeAttribute('transform');
-  const d=panD||{dx:0,dy:0};
-  if(Math.abs(d.dx)<2 && Math.abs(d.dy)<2) return;   // a click, not a drag
-  const sx=MAP.w/TER.w, sy=MAP.h/TER.h;
-  const Z=Math.max(1, Math.pow(2, zoomFromT(state.routeZoom)-TER.zoom));
-  const worldDx=d.dx/sx/Z, worldDy=d.dy/sy/Z;        // poster→TER px→world px (÷ visual zoom)
-  const wx=lon2tileX(TER.lon,TER.zoom)*256 - worldDx;
-  const wy=lat2tileY(TER.lat,TER.zoom)*256 - worldDy;
-  reframePlace(tileY2lat(wy/256,TER.zoom), tileX2lon(wx/256,TER.zoom), TER.zoom); // note: (lat,lon,zoom)
+  if(!moved) return;
+  const c=frameCenterLatLon(TER); TER.lat=c.lat; TER.lon=c.lon;   // window centre is the new centre
+  const maxX=Math.max(0,TER.w-R_W), maxY=Math.max(0,TER.h-R_H), m=0.18;
+  const nearEdge = TER.viewDX<maxX*m || TER.viewDX>maxX*(1-m) || TER.viewDY<maxY*m || TER.viewDY>maxY*(1-m);
+  if(nearEdge){ reframePlace(c.lat,c.lon,TER.zoom); }         // recentre + refetch (restores margin)
+  else { render(); if(typeof saveSessionSoon==='function') saveSessionSoon(); if(state.showWater) updateFeaturesSoon(); }
  };
  posterEl.addEventListener('pointerup', endPan);
  posterEl.addEventListener('pointercancel', endPan);
@@ -17506,7 +17536,9 @@ window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMo
    the map viewport, so it pans/zooms with everything else. Off by default.
    ========================================================================== */
 const featCache=new Map(); let featData=null, featReq=0, featTimer=null;
-function frameKey(){ return TER ? (TER.lat.toFixed(4)+','+TER.lon.toFixed(4)+','+TER.zoom) : ''; }
+/* Water is keyed to the GRID (overscan extent), not the display centre — so
+   panning within the loaded grid keeps the overlay without a refetch. */
+function gridKey(){ return TER ? (Math.round(TER.left)+','+Math.round(TER.top)+','+TER.zoom) : ''; }
 function frameGeoBbox(){
  if(!TER) return null; const z=TER.zoom;
  return { s:tileY2lat((TER.top+TER.h)/256,z), w:tileX2lon(TER.left/256,z),
@@ -17517,7 +17549,7 @@ async function updateFeatures(){
  if(!state.showWater || !TER){ featData=null; if(note) note.textContent=''; render(); return; }
  const bb=frameGeoBbox(); if(!bb) return;
  const key=[bb.s,bb.w,bb.n,bb.e].map(v=>v.toFixed(3)).join(',');
- if(featCache.has(key)){ featData={...featCache.get(key), frameKey:frameKey()}; if(note) note.textContent=''; render(); return; }
+ if(featCache.has(key)){ featData={...featCache.get(key), gridKey:gridKey()}; if(note) note.textContent=''; render(); return; }
  const seq=++featReq; if(note) note.textContent='Loading water…';
  try{
   const res=await fetch(`${BACKEND_URL}/api/features?bbox=${bb.s},${bb.w},${bb.n},${bb.e}&layers=water`, {cache:'no-store'});
@@ -17526,12 +17558,12 @@ async function updateFeatures(){
   const data=await res.json();
   const rec={ polys:data.polys||[], lines:data.lines||[] };
   featCache.set(key,rec);
-  featData={...rec, frameKey:frameKey()};
-  if(note) note.textContent = (rec.polys.length+rec.lines.length) ? '' : 'No water features in view.';
+  featData={...rec, gridKey:gridKey()};
+  if(note) note.textContent = data.error ? 'Water data unavailable right now.' : ((rec.polys.length+rec.lines.length) ? '' : 'No water features in view.');
   render();
  }catch(e){ if(seq===featReq){ featData=null; if(note) note.textContent='Water data unavailable — the map is still fine.'; render(); } }
 }
-function updateFeaturesSoon(){ clearTimeout(featTimer); featTimer=setTimeout(updateFeatures,350); }
+function updateFeaturesSoon(){ clearTimeout(featTimer); featTimer=setTimeout(updateFeatures,700); }
 function waterColors(){ return state.darkPoster ? { fill:'#33566a', line:'#6fa9c4' } : { fill:'#b9d4e3', line:'#6f9fba' }; }
 {
  const wt=document.getElementById('showWater');
