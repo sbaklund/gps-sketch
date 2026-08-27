@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.26.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.27.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -1478,7 +1478,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.26.0', date: '2026-08-26' };
+    window.__BUILD__ = { html: 'v0.27.0', date: '2026-08-27' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -16793,6 +16793,60 @@ window.BACKEND_URL = BACKEND_URL;
 // the frame's world-pixel box (left/top at zoom) maps straight onto tile pixels.
 // Terrarium decode: metres = (R*256 + G + B/256) - 32768, then ×3.28084 = feet.
 const TERRARIUM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
+
+/* Fetch one elevation tile with a per-attempt timeout and exponential backoff.
+   A single stalled tile used to hang the whole map forever (Promise.all never
+   settled) — now each attempt is aborted after `timeoutMs` and retried, so a
+   flaky network or a rate-limit blip recovers on its own instead of freezing
+   the "Creating map…" spinner. 4xx (other than 429) won't improve on retry, so
+   we bail early on those. Resolves to an ImageBitmap or rejects after all tries. */
+async function fetchTileImage(url, { timeoutMs = 6000, tries = 3 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    if (attempt > 0) {
+      const wait = Math.min(1500, 300 * Math.pow(2, attempt - 1)) + Math.random() * 200;
+      await new Promise(r => setTimeout(r, wait));
+    }
+    const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const to = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+    try {
+      const r = await fetch(url, { mode: 'cors', cache: 'force-cache', signal: ctrl ? ctrl.signal : undefined });
+      if (to) clearTimeout(to);
+      if (!r.ok) {
+        lastErr = new Error('HTTP ' + r.status);
+        if (r.status >= 400 && r.status < 500 && r.status !== 429) break; // permanent — don't retry
+        continue;
+      }
+      const bmp = await createImageBitmap(await r.blob());
+      return bmp;
+    } catch (e) {
+      if (to) clearTimeout(to);
+      lastErr = e; // abort/timeout or network error → retry
+    }
+  }
+  throw lastErr || new Error('tile failed');
+}
+
+/* Nearest-neighbour fill for the occasional missing tile. Before this, a tile
+   that failed left its pixels at 0 (sea level) — a hard, off-colour flat patch
+   that also dragged the elevation range's floor down to 0. Holes are marked NaN
+   during sampling and filled here from the closest real neighbour (horizontal
+   then vertical sweep), so a partial fetch degrades smoothly instead of tearing
+   a blue-black rectangle through the poster. */
+function fillHoles(a, w, h, fallback) {
+  const sweep = (get, set, len, run) => {
+    for (let outer = 0; outer < run; outer++) {
+      let last = NaN;
+      for (let inner = 0; inner < len; inner++) { const o = get(outer, inner); if (!isNaN(a[o])) last = a[o]; else if (!isNaN(last)) a[o] = last; }
+      last = NaN;
+      for (let inner = len - 1; inner >= 0; inner--) { const o = get(outer, inner); if (!isNaN(a[o])) last = a[o]; else if (!isNaN(last)) a[o] = last; }
+    }
+  };
+  sweep((row, col) => row * w + col, null, w, h);   // horizontal
+  sweep((col, row) => row * w + col, null, h, w);   // vertical
+  for (let k = 0; k < a.length; k++) if (isNaN(a[k])) a[k] = fallback;
+}
+
 async function fetchTerrain(frame, source) {
   const TILE = 256;
   const { left, top, zoom } = frame;
@@ -16803,15 +16857,15 @@ async function fetchTerrain(frame, source) {
   // Fetch + decode every covering tile in parallel.
   const tiles = {};
   const jobs  = [];
+  let total = 0;
   for (let ty = ty0; ty <= ty1; ty++) {
     for (let tx = tx0; tx <= tx1; tx++) {
+      total++;
       const X = ((tx % scale) + scale) % scale;
       const Y = Math.min(Math.max(ty, 0), maxIdx);
       const url = `${TERRARIUM_URL}/${zoom}/${X}/${Y}.png`;
       jobs.push(
-        fetch(url, { mode: 'cors', cache: 'force-cache' })
-          .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
-          .then(b => createImageBitmap(b))
+        fetchTileImage(url, { timeoutMs: 6000, tries: 3 })
           .then(bmp => {
             const c = document.createElement('canvas'); c.width = TILE; c.height = TILE;
             const g = c.getContext('2d', { willReadFrequently: true });
@@ -16823,9 +16877,16 @@ async function fetchTerrain(frame, source) {
     }
   }
   await Promise.all(jobs);
-  if (Object.keys(tiles).length === 0) {
+  const got = Object.keys(tiles).length;
+  if (got === 0) {
     throw new Error('Could not load elevation tiles (check your connection).');
   }
+  // Too many holes to fill convincingly — fail cleanly to the plain-background
+  // fallback rather than paint a map that's mostly guessed.
+  if (got / total < 0.5) {
+    throw new Error('Only part of the elevation data loaded — please try again.');
+  }
+  const hasHoles = got < total;
 
   // Sample the R_W×R_H output grid straight out of the tile mosaic.
   const out = new Float64Array(R_W * R_H);
@@ -16835,17 +16896,19 @@ async function fetchTerrain(frame, source) {
       const wX = left + i, wY = top + j;
       const tx = Math.floor(wX / TILE), ty = Math.floor(wY / TILE);
       const px = tiles[tx + '_' + ty];
-      let ef = 0;
       if (px) {
         const lx = (wX - tx * TILE) | 0, ly = (wY - ty * TILE) | 0, o = (ly * TILE + lx) * 4;
-        ef = ((px[o] * 256 + px[o + 1] + px[o + 2] / 256) - 32768) * 3.28084;
+        const ef = ((px[o] * 256 + px[o + 1] + px[o + 2] / 256) - 32768) * 3.28084;
+        out[j * R_W + i] = ef;
+        if (ef < min) min = ef;
+        if (ef > max) max = ef;
+      } else {
+        out[j * R_W + i] = NaN;   // missing tile → hole, filled after the range is known
       }
-      out[j * R_W + i] = ef;
-      if (ef < min) min = ef;
-      if (ef > max) max = ef;
     }
   }
   if (!(max > min)) throw new Error('No elevation range in tiles (flat or all water?).');
+  if (hasHoles) fillHoles(out, R_W, R_H, min);
   return { data: out, minFt: min, maxFt: max };
 }
 function parseGpx(text){
@@ -16882,6 +16945,38 @@ function gpxStatsWithTerrain(pts,grid,t){ const base=gpxStatsBase(pts); if(base.
 
 /* ---------- render ---------- */
 const svg=d3.select('#poster');
+/* Title layout: wrap a topo title to at most TWO lines, shrinking the type
+   when it spills a single line, and hard-truncating with an ellipsis so an
+   over-long name (e.g. a verbose Strava activity title) is cut off cleanly
+   instead of running off the edge of the 900-wide poster. There is a fixed
+   ~60px of breathing room on each side, and the guardrail refuses to grow a
+   third line — the second line simply ends in "…". Returns {lines, fontPx}. */
+function topoTitleLayout(raw){
+ const MAXW=780, WEIGHT='800', LS=2;   // 900 poster − 60px padding each side
+ const text=(raw||'').toUpperCase().replace(/\s+/g,' ').trim();
+ if(!text) return {lines:[''], fontPx:46};
+ const ctx=topoTitleLayout._c||(topoTitleLayout._c=document.createElement('canvas').getContext('2d'));
+ const wide=(s,fs)=>{ ctx.font=WEIGHT+' '+fs+'px Inter, sans-serif'; return s?ctx.measureText(s).width+LS*Math.max(0,s.length-1):0; };
+ if(wide(text,46)<=MAXW) return {lines:[text], fontPx:46};   // fits one line at full size
+ const FS=34;                                                // spills → drop a size and wrap
+ const trunc=s=>{ if(wide(s,FS)<=MAXW) return s; let n=s.length;
+  while(n>0 && wide(s.slice(0,n).replace(/\s+$/,'')+'…',FS)>MAXW) n--;
+  return s.slice(0,Math.max(0,n)).replace(/\s+$/,'')+'…'; };
+ const words=text.split(' '); const lines=[]; let cur='', i=0;
+ while(i<words.length){
+  const word=words[i], trial=cur?cur+' '+word:word;
+  if(wide(trial,FS)<=MAXW){ cur=trial; i++; continue; }
+  if(cur===''){                                   // one word wider than a whole line
+   if(lines.length===1){ lines.push(trunc(word)); cur=''; break; }
+   let n=1; while(n<word.length && wide(word.slice(0,n+1),FS)<=MAXW) n++;
+   lines.push(word.slice(0,n)); words[i]=word.slice(n); continue;   // reprocess remainder
+  }
+  lines.push(cur); cur='';                         // commit line, wrap the word down
+  if(lines.length===1){ lines.push(trunc([word].concat(words.slice(i+1)).join(' '))); cur=''; break; }
+ }
+ if(cur!=='' && lines.length<2) lines.push(cur);
+ return {lines: lines.length?lines:[text], fontPx:FS};
+}
 function render(){
  if(!TER) return; const P=state.preset, BG=bgColor(), LN=lineColor(), INK=inkColor();
  svg.selectAll('*').remove();
@@ -16939,10 +17034,18 @@ function render(){
   rg.append('circle').attr('cx',route[0][0]).attr('cy',route[0][1]).attr('r',r).attr('fill',P.route);
   rg.append('circle').attr('cx',route[route.length-1][0]).attr('cy',route[route.length-1][1]).attr('r',r).attr('fill',BG).attr('stroke',P.route).attr('stroke-width',r*0.5);
  }
- const cx=450,ly=1032,L=svg.append('g'),FF='Inter, sans-serif';
- L.append('text').attr('x',cx).attr('y',ly).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','800').attr('font-size','46').attr('letter-spacing','2').attr('fill',INK).text((document.getElementById('title').value||'').toUpperCase());
- L.append('text').attr('x',cx).attr('y',ly+30).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','18').attr('letter-spacing','1').attr('fill',INK).attr('opacity',0.75).text(document.getElementById('subtitle').value||'');
- L.append('line').attr('x1',cx-150).attr('x2',cx+150).attr('y1',ly+52).attr('y2',ly+52).attr('stroke',INK).attr('stroke-opacity',0.4).attr('stroke-width',1);
+ const cx=450,L=svg.append('g'),FF='Inter, sans-serif';
+ const TL=topoTitleLayout(document.getElementById('title').value);
+ const two=TL.lines.length>1;
+ /* One line keeps the original position exactly; two lines lift the first
+    line up (still clearing the map) and reflow everything below into the
+    poster's bottom margin. `base` is the baseline of the LAST title line. */
+ const firstY=two?1016:1032, base=two?1054:1032, lineGap=38;
+ TL.lines.forEach((ln,i)=>{
+  L.append('text').attr('x',cx).attr('y',firstY+i*lineGap).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','800').attr('font-size',TL.fontPx).attr('letter-spacing','2').attr('fill',INK).text(ln);
+ });
+ L.append('text').attr('x',cx).attr('y',base+30).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','18').attr('letter-spacing','1').attr('fill',INK).attr('opacity',0.75).text(document.getElementById('subtitle').value||'');
+ L.append('line').attr('x1',cx-150).attr('x2',cx+150).attr('y1',base+52).attr('y2',base+52).attr('stroke',INK).attr('stroke-opacity',0.4).attr('stroke-width',1);
  let statLine,coordLine;
  if(!rawGpx){ statLine='UPLOAD A GPX ROUTE TO GET STARTED'; coordLine=''; }
  else if(routeStats){
@@ -16957,8 +17060,8 @@ function render(){
   const r10=x=>Math.round(x/10)*10; statLine=`ELEVATION ${r10(TER.minFt).toLocaleString()}–${r10(TER.maxFt).toLocaleString()} FT   ·   CONTOUR ${state.interval} FT`;
   const ns=TER.lat>=0?'N':'S',ew=TER.lon>=0?'E':'W'; coordLine=`${Math.abs(TER.lat).toFixed(4)}° ${ns}   ${Math.abs(TER.lon).toFixed(4)}° ${ew}`;
  } else { statLine='LOADING ROUTE…'; coordLine=''; }
- L.append('text').attr('x',cx).attr('y',ly+82).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','600').attr('font-size','15.5').attr('letter-spacing','1.5').attr('fill',INK).text(statLine);
- L.append('text').attr('x',cx).attr('y',ly+108).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','12').attr('letter-spacing','2').attr('fill',INK).attr('opacity',0.6).text(coordLine);
+ L.append('text').attr('x',cx).attr('y',base+82).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','600').attr('font-size','15.5').attr('letter-spacing','1.5').attr('fill',INK).text(statLine);
+ L.append('text').attr('x',cx).attr('y',base+108).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','12').attr('letter-spacing','2').attr('fill',INK).attr('opacity',0.6).text(coordLine);
 }
 function crossfade(){ const shell=document.getElementById('poster-shell');
  if(matchMedia('(prefers-reduced-motion: reduce)').matches){ render(); return; }
@@ -17286,9 +17389,13 @@ function smoothGrid(data,w,h,radius,passes){
  for(let i=0;i<(passes??3);i++){ cur=boxBlur1D(cur,w,h,true,radius); cur=boxBlur1D(cur,w,h,false,radius); }
  return cur; }
 
+let terrainReq=0;   // generation token — only the newest load may apply its result
 async function tryLoadTerrain(){
+ const myReq=++terrainReq;
  const key=TER.lat.toFixed(3)+','+TER.lon.toFixed(3)+','+TER.zoom;
+ const stale=()=>myReq!==terrainReq;   // a newer load has superseded this one
  const applyElev=(rawData,cached)=>{
+  if(stale()) return;
   /* Radius 2, 3 passes ≈ a soft gaussian — enough to erase ground noise and
      tile seams without softening the shape of real ridgelines and valleys. */
   /* Light touch only: real Terrarium DEM already has true detail. A radius-1
@@ -17311,16 +17418,23 @@ async function tryLoadTerrain(){
  /* 'auto' — the server tries its best available source and falls back
     automatically. The person using this app never needs to know or care
     which elevation provider actually served the data. */
- try{ const {data,minFt,maxFt}=await fetchTerrain(TER,'auto'); terrainCache.set(key,{rawData:data,minFt,maxFt}); applyElev(data,false); }
+ try{ const {data,minFt,maxFt}=await fetchTerrain(TER,'auto');
+  if(stale()) return;                                   // a newer route/frame won the race
+  terrainCache.set(key,{rawData:data,minFt,maxFt}); applyElev(data,false); }
  catch(err){
+  if(stale()) return;                                   // don't clobber a newer load's UI
   /* Graceful fallback: the route still makes a clean poster on a plain
-     background. Keep the message friendly and offer the retry affordance. */
+     background. Keep the message friendly and offer the retry affordance. The
+     message names the likely cause (offline vs area) so it's actually useful. */
   terrainStatus='failed';
-  msg('warn','Couldn’t load elevation for this area — showing your route on a plain background. Tap “Retry elevation” to try again.');
+  const offline = (typeof navigator!=='undefined' && navigator.onLine===false);
+  msg('warn', offline
+   ? 'You appear to be offline — showing your route on a plain background. Reconnect, then tap “Retry elevation.”'
+   : 'Couldn’t load elevation for this area — showing your route on a plain background. Tap “Retry elevation” to try again.');
   document.getElementById('retryElev').style.display='';
   render();
  }
- finally{ busy.classList.remove('on'); document.getElementById('retryElev').disabled=false; } }
+ finally{ if(!stale()){ busy.classList.remove('on'); document.getElementById('retryElev').disabled=false; } } }
 /* Loads a route frame centred on given coordinates and kicks off the elevation
    fetch. Called automatically after a GPX/Strava import — no manual lat/lon/
    zoom entry needed; the frame is derived from the route's own bounding box. */
@@ -17335,6 +17449,11 @@ async function loadRouteFrame(lat,lon,z){
 document.getElementById('retryElev').onclick=async()=>{
  if(!rawGpx){ msg('warn','Upload a GPX route first.'); return; }
  await tryLoadTerrain(); };
+/* If the connection drops mid-load and comes back, quietly retry the elevation
+   fetch instead of stranding the user on the plain-background fallback. */
+window.addEventListener('online', ()=>{
+ if(terrainStatus==='failed' && rawGpx){ msg('','Back online — retrying elevation…'); tryLoadTerrain(); }
+});
 /* ---------- Strava connect ---------- */
 let stravaConnected=false;
 function setStravaUI(connected, name, profile){
