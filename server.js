@@ -1,5 +1,5 @@
 // ======================================================================
-//  GPX Sketch  —  SERVER BUILD  v0.29.0
+//  GPX Sketch  —  SERVER BUILD  v0.31.0
 //  Keep in sync with window.__BUILD__.html (frontend) and VERSION.txt.
 // ======================================================================
 'use strict';
@@ -9,7 +9,7 @@ console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.29.0';
+const BUILD = 'v0.31.0';
 console.log('[boot] build', BUILD);
 
 /**
@@ -69,6 +69,12 @@ try {
   geocodeRouter = require('./routes/geocode');
   console.log('[boot] routes/geocode loaded ✓');
 } catch(e) { console.error('[boot] WARN: cannot load routes/geocode:', e.message); }
+
+let featuresRouter;
+try {
+  featuresRouter = require('./routes/features');
+  console.log('[boot] routes/features loaded ✓');
+} catch(e) { console.error('[boot] WARN: cannot load routes/features:', e.message); }
 
 // ---------------------------------------------------------------------------
 // CORS — only needed for local dev (production is same-origin)
@@ -186,6 +192,7 @@ app.get('/health', (req, res) => {
 
 app.use('/api/terrain', terrainRouter);
 if (geocodeRouter) app.use('/api/geocode', geocodeRouter);
+if (featuresRouter) app.use('/api/features', featuresRouter);
 app.use(strava.router);
 
 // 404 — but only for /api and /auth paths (static misses are already handled)
