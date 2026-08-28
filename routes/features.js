@@ -4,34 +4,26 @@
  * routes/features.js
  *
  * GET /api/features?bbox=<south,west,north,east>&layers=water
+ *   → { bbox:[s,w,n,e], polys:[ [[lon,lat],…], … ], lines:[ [[lon,lat],…], … ] }
+ *     polys = filled areas (lakes, reservoirs, oceans, bays)
+ *     lines = strokes      (rivers, streams, canals)
  *
- * Map-feature overlays for the topo poster (roads/rivers/lakes push, F1 = water).
- * Returns geometry in a small, source-agnostic shape so the client never has to
- * know where it came from:
+ * ── v0.39.0 DATA SOURCE = MapTiler vector tiles ────────────────────────────
+ * Overpass is unreachable from Render's datacenter IP (confirmed live: the host
+ * either refuses the socket — "fetch failed" — or hangs past our timeout, even
+ * with IPv4 forced). MapTiler, by contrast, is a CDN Render already reaches for
+ * the elevation fallback, and Stephen has a MAPTILER_KEY. So water now comes
+ * from MapTiler's OpenMapTiles "v3" vector tiles:
+ *   - the `water` layer → polygons (oceans, lakes, bays, reservoirs) → polys
+ *   - the `waterway` layer → lines (rivers, streams, canals)          → lines
+ * We decode the .pbf with @mapbox/vector-tile + pbf and use each feature's
+ * toGeoJSON(x,y,z), which yields lon/lat coordinates directly — the SAME
+ * source-agnostic contract the client already consumes, so NOTHING on the
+ * frontend changes. If we ever swap sources again, only this file changes.
  *
- *   { bbox:[s,w,n,e], polys:[ [[lon,lat],…], … ], lines:[ [[lon,lat],…], … ] }
- *
- *   polys = filled areas (lakes, reservoirs, riverbanks, bays)
- *   lines = strokes      (rivers, streams, canals, coastline)
- *
- * F1 data source = Overpass API (OpenStreetMap), server-side, disk-cached like
- * geocode.js. The contract above is deliberately decoupled from Overpass: if we
- * later swap to MapTiler vector tiles for scale, only this file changes.
- *
- * ── v0.34.0 fetch hardening ────────────────────────────────────────────────
- * Symptom (Render logs): every Overpass call fails with "fetch failed" — a
- * CONNECTION-level error (socket never opened), NOT an HTTP status — while the
- * geocoder's Nominatim GET works fine from the same host. Classic Node/undici
- * IPv6 signature: fetch resolves an AAAA record and the container's IPv6 egress
- * is dead, so it errors instead of trying IPv4.
- *   1. Force IPv4 DNS order (`dns.setDefaultResultOrder('ipv4first')`) so every
- *      outbound socket prefers A records. Zero-dependency, the canonical fix.
- *   2. Bound the whole request: short per-attempt timeout + a total-time budget,
- *      so /api/features ALWAYS returns a fast 200-empty on failure instead of
- *      hanging past the proxy timeout and surfacing as a 502 in the client.
- *   3. /api/features/diag is now definitive — it resolves A/AAAA, raw-TCP-tests
- *      :443, and reports per-mirror fetch results, so one look pinpoints whether
- *      the problem is DNS, IPv6-only, a datacenter-IP block, or an HTTP block.
+ * Kept from before: disk cache (like geocode.js), a hard time budget so the
+ * endpoint always returns a fast 200 (never a 502), soft-fail to an empty
+ * overlay, and a /diag endpoint to debug reachability live.
  */
 
 const express = require('express');
@@ -39,30 +31,26 @@ const fs      = require('fs');
 const path    = require('path');
 const dns     = require('node:dns');
 const net     = require('node:net');
+const { VectorTile } = require('@mapbox/vector-tile');
+const Pbf     = require('pbf');
 
-// Prefer IPv4 for every outbound connection from this process. Most cloud
-// containers have working IPv4 but broken/absent IPv6 egress; Node's fetch
-// otherwise picks an AAAA record and dies with a bare "fetch failed".
 try { dns.setDefaultResultOrder('ipv4first'); } catch (_) {}
 
 const router = express.Router();
 
-const UA = 'GPXSketch/1.0 (route-art poster generator; contact via gpxsketch)';
-// Several public Overpass mirrors — we try them in order so one being down or
-// rate-limiting doesn't kill the overlay.
-const OVERPASS_MIRRORS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-];
+const MAPTILER_KEY = (process.env.MAPTILER_KEY || '').trim();
+const MT_HOST = 'api.maptiler.com';
+// OpenMapTiles v3 schema — has `water` (polygons) + `waterway` (lines).
+const tileUrl = (z, x, y) => `https://${MT_HOST}/tiles/v3/${z}/${x}/${y}.pbf?key=${MAPTILER_KEY}`;
+const UA = 'GPXSketch/1.0 (route-art poster generator)';
 
-// Request bounding. Keep the whole feature request short so the client never
-// waits long and Render's proxy never times us out into a 502.
-const ATTEMPT_MS = 5000;   // per mirror×method attempt
-const BUDGET_MS  = 11000;  // hard cap across all attempts
+// Request bounding — keep the whole thing short so Render never times us out.
+const ATTEMPT_MS = 4500;   // per tile fetch
+const BUDGET_MS  = 10000;  // hard cap across all tiles
+const MAX_TILES  = 12;     // cap the tile fan-out for one frame
+const MT_MAXZOOM = 14;     // v3 water tiles top out here (overzoom above)
 
-const CACHE_DIR = path.join(__dirname, '..', 'cache');
+const CACHE_DIR  = path.join(__dirname, '..', 'cache');
 const CACHE_FILE = path.join(CACHE_DIR, 'features-cache.json');
 
 // ---- tiny disk cache (keyed by rounded bbox + layers) -------------------
@@ -72,9 +60,8 @@ function saveCache() {
   try { fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
 }
 
-const r6 = n => Math.round(n * 1e6) / 1e6;   // ~0.1 m precision — plenty for a poster
+const r6 = n => Math.round(n * 1e6) / 1e6;
 
-// Decimate an over-dense ring/line so payloads and SVG stay light.
 function decimate(coords, max) {
   if (coords.length <= max) return coords;
   const step = Math.ceil(coords.length / max);
@@ -84,119 +71,90 @@ function decimate(coords, max) {
   return out;
 }
 
-// Build the Overpass query for the requested layers within a bbox.
-function overpassQuery(s, w, n, e, layers) {
-  const box = `(${s},${w},${n},${e})`;
-  const parts = [];
-  if (layers.has('water')) {
-    // Filled areas: lakes, reservoirs, riverbanks, and — key for coastal cities
-    // like Seattle/Puget Sound — bays and straits, which map big open water as
-    // fillable polygons (coastline alone is only a line, so a sound would show
-    // as a thin stroke, not a filled body).
-    parts.push(`way["natural"="water"]${box};`);
-    parts.push(`way["natural"="bay"]${box};`);
-    parts.push(`way["natural"="strait"]${box};`);
-    parts.push(`way["waterway"~"^(river|stream|canal|riverbank|ditch)$"]${box};`);
-    parts.push(`way["natural"="coastline"]${box};`);
-    parts.push(`relation["natural"="water"]${box};`);
-    parts.push(`relation["natural"="bay"]${box};`);
+// ---- Web-Mercator tile math ---------------------------------------------
+const lon2tileX = (lon, z) => Math.floor((lon + 180) / 360 * Math.pow(2, z));
+const lat2tileY = (lat, z) => {
+  const r = lat * Math.PI / 180;
+  return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z));
+};
+
+// Pick a tile zoom that covers the bbox in a manageable number of tiles.
+// Start near "one tile across the bbox" + a touch more detail, then step DOWN
+// until the covering tile count is within MAX_TILES.
+function pickZoom(s, w, n, e) {
+  const lonSpan = Math.max(1e-6, e - w);
+  let z = Math.round(Math.log2(360 / lonSpan)) + 1;
+  z = Math.max(3, Math.min(MT_MAXZOOM, z));
+  for (; z > 3; z--) {
+    const x0 = lon2tileX(w, z), x1 = lon2tileX(e, z);
+    const y0 = lat2tileY(n, z), y1 = lat2tileY(s, z);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) <= MAX_TILES) break;
   }
-  return `[out:json][timeout:20];(${parts.join('')});out geom;`;
+  return z;
 }
 
-// Turn one Overpass element's geometry into [ [lon,lat], … ] (rounded).
-function geomToCoords(geometry) {
-  if (!Array.isArray(geometry)) return null;
-  const c = [];
-  for (const g of geometry) {
-    if (g && isFinite(g.lon) && isFinite(g.lat)) c.push([r6(g.lon), r6(g.lat)]);
+// Turn one GeoJSON geometry (lon/lat) into our polys/lines, decimated.
+function collectGeo(geom, polys, lines) {
+  if (!geom) return;
+  const push = (coords, isPoly) => {
+    const d = decimate(coords.map(c => [r6(c[0]), r6(c[1])]), 600);
+    if (isPoly) { if (d.length >= 4) polys.push(d); }
+    else if (d.length >= 2) lines.push(d);
+  };
+  switch (geom.type) {
+    case 'Polygon':         geom.coordinates.forEach(ring => push(ring, true)); break;
+    case 'MultiPolygon':    geom.coordinates.forEach(poly => poly.forEach(ring => push(ring, true))); break;
+    case 'LineString':      push(geom.coordinates, false); break;
+    case 'MultiLineString': geom.coordinates.forEach(l => push(l, false)); break;
   }
-  return c.length ? c : null;
 }
 
-function isClosed(c) {
-  if (c.length < 4) return false;
-  const a = c[0], b = c[c.length - 1];
-  return a[0] === b[0] && a[1] === b[1];
-}
-
-// Parse an Overpass JSON response into { polys, lines }.
-function parseOverpass(json) {
-  const polys = [], lines = [];
-  const els = (json && json.elements) || [];
-  for (const el of els) {
-    const tags = el.tags || {};
-    if (el.type === 'way') {
-      const c = geomToCoords(el.geometry);
-      if (!c) continue;
-      const isWaterArea = tags.natural === 'water' || tags.natural === 'bay'
-        || tags.natural === 'strait' || tags.waterway === 'riverbank';
-      if (isWaterArea && c.length >= 4) {
-        polys.push(decimate(c, 600));
-      } else if (tags.waterway || tags.natural === 'coastline') {
-        if (c.length >= 2) lines.push(decimate(c, 600));
-      } else if (isClosed(c) && c.length >= 4) {
-        polys.push(decimate(c, 600));
-      }
-    } else if (el.type === 'relation' && Array.isArray(el.members)) {
-      // natural=water / natural=bay multipolygon: draw each member way as a
-      // filled ring. (Inner "hole" rings are drawn as fills too — acceptable
-      // for poster art; noted as a later-fidelity item.)
-      for (const m of el.members) {
-        if (m && m.type === 'way' && m.geometry) {
-          const c = geomToCoords(m.geometry);
-          if (c && c.length >= 4) polys.push(decimate(c, 600));
-        }
-      }
+// Decode one MapTiler v3 tile buffer → append water geometry to polys/lines.
+// Classify by GEOMETRY TYPE (robust): water areas are polygons, waterways lines.
+function decodeTile(buf, x, y, z, polys, lines) {
+  const tile = new VectorTile(new Pbf(buf));
+  for (const name of ['water', 'waterway']) {
+    const layer = tile.layers[name];
+    if (!layer) continue;
+    for (let i = 0; i < layer.length; i++) {
+      let gj; try { gj = layer.feature(i).toGeoJSON(x, y, z); } catch (_) { continue; }
+      if (gj) collectGeo(gj.geometry, polys, lines);
     }
   }
-  return { polys, lines };
 }
 
-// Hit one Overpass mirror. Default method is GET (`?data=<query>`) — the SAME
-// request style as the geocoder's Nominatim call, which is known to work from
-// the deploy host; a POST fallback covers mirrors that prefer it. `timeout`
-// bounds the attempt. Returns parsed JSON, or throws with the status + a body
-// snippet (where Overpass reports "rate_limited" / syntax errors).
-async function hitOverpass(url, query, method, timeout) {
+async function fetchArrayBuffer(url, timeout) {
   const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   const to = ctrl ? setTimeout(() => ctrl.abort(), timeout || ATTEMPT_MS) : null;
   try {
-    const opts = { headers: { 'User-Agent': UA, 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined };
-    let target = url;
-    if (method === 'POST') {
-      opts.method = 'POST';
-      opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
-      opts.body = 'data=' + encodeURIComponent(query);
-    } else {
-      target = url + '?data=' + encodeURIComponent(query);   // GET
-    }
-    const res = await fetch(target, opts);
+    const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: ctrl ? ctrl.signal : undefined });
     if (to) clearTimeout(to);
-    const text = await res.text();
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 160).replace(/\s+/g, ' ')}`);
-    try { return JSON.parse(text); }
-    catch { throw new Error(`non-JSON: ${text.slice(0, 160).replace(/\s+/g, ' ')}`); }
-  } catch (e) {
-    if (to) clearTimeout(to);
-    throw e;
-  }
+    if (res.status === 204 || res.status === 404) return null;   // empty tile → no water here
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return Buffer.from(await res.arrayBuffer());
+  } catch (e) { if (to) clearTimeout(to); throw e; }
 }
 
-// Try mirrors × methods within a total time budget. Fails fast and never runs
-// long enough to trip Render's proxy timeout (which is what turned into a 502).
-async function fetchOverpass(query) {
+// Fetch + decode all tiles covering the bbox, within the time budget.
+async function fetchWater(s, w, n, e) {
+  if (!MAPTILER_KEY) throw new Error('MAPTILER_KEY not set');
+  const z = pickZoom(s, w, n, e);
+  const x0 = lon2tileX(w, z), x1 = lon2tileX(e, z);
+  const y0 = lat2tileY(n, z), y1 = lat2tileY(s, z);
+  const polys = [], lines = [];
   const deadline = Date.now() + BUDGET_MS;
-  let lastErr;
-  for (const url of OVERPASS_MIRRORS) {
-    for (const method of ['GET', 'POST']) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 250) { lastErr = lastErr || new Error('feature request budget exhausted'); return Promise.reject(lastErr); }
-      try { return await hitOverpass(url, query, method, Math.min(ATTEMPT_MS, remaining)); }
-      catch (e) { lastErr = e; console.warn(`[features] overpass ${method} failed (${url}): ${e.message}`); }
-    }
+  const jobs = [];
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 300) break;
+    jobs.push(
+      fetchArrayBuffer(tileUrl(z, x, y), Math.min(ATTEMPT_MS, remaining))
+        .then(buf => { if (buf && buf.length) decodeTile(buf, x, y, z, polys, lines); })
+        .catch(err => { console.warn(`[features] maptiler tile ${z}/${x}/${y} failed: ${err.message}`); })
+    );
   }
-  throw lastErr || new Error('all overpass mirrors failed');
+  await Promise.all(jobs);
+  return { polys, lines, z };
 }
 
 router.get('/', async (req, res) => {
@@ -207,8 +165,6 @@ router.get('/', async (req, res) => {
   let [s, w, n, e] = bbox;
   if (s > n) [s, n] = [n, s];
   if (w > e) [w, e] = [e, w];
-
-  // Guard against absurdly large queries (whole-continent / very-zoomed-out).
   if ((n - s) > 1.6 || (e - w) > 1.6) {
     return res.json({ bbox: [s, w, n, e], polys: [], lines: [], note: 'area too large for feature overlay' });
   }
@@ -216,33 +172,23 @@ router.get('/', async (req, res) => {
   const layers = new Set(String(req.query.layers || 'water').split(',').map(x => x.trim()).filter(Boolean));
   const key = [s, w, n, e].map(v => v.toFixed(3)).join(',') + '|' + [...layers].sort().join(',');
   if (cache[key]) return res.json(cache[key]);
+  if (!layers.has('water')) return res.json({ bbox: [s, w, n, e], polys: [], lines: [] });
 
   try {
-    const json = await fetchOverpass(overpassQuery(s, w, n, e, layers));
-    const { polys, lines } = parseOverpass(json);
+    const { polys, lines } = await fetchWater(s, w, n, e);
     const out = { bbox: [s, w, n, e], polys, lines };
-    cache[key] = out;
-    saveCache();
+    cache[key] = out; saveCache();
     res.json(out);
   } catch (err) {
-    console.error('[features] all overpass mirrors failed:', err.message);
-    // Soft-fail with 200 so the client treats it as "no overlay right now"
-    // rather than a scary network error; the poster is fine without it.
-    res.json({ bbox: [s, w, n, e], polys: [], lines: [], error: 'overpass unavailable' });
+    console.error('[features] water fetch failed:', err.message);
+    // Soft-fail 200 so the client treats it as "no overlay right now", never a 502.
+    res.json({ bbox: [s, w, n, e], polys: [], lines: [], error: 'water source unavailable' });
   }
 });
 
 // ---- diagnostic: GET /api/features/diag --------------------------------
-// Visit this in a browser on the deployed site to see exactly why the water
-// overlay can't reach Overpass. It answers, per mirror:
-//   • does DNS resolve A (IPv4) and AAAA (IPv6) records?
-//   • can we open a raw TCP socket to :443 on the IPv4 address? (error code
-//     distinguishes "network unreachable / blocked" from a working route)
-//   • does the actual GET/POST fetch succeed, and how many elements come back?
-// Between those three, one look tells us: DNS problem, IPv6-only failure,
-// datacenter-IP block (TCP refused/timeout), or HTTP-level block (403/429).
-function hostOf(url) { try { return new URL(url).hostname; } catch { return url; } }
-
+// Confirms live whether MapTiler is reachable + the key works, and decodes a
+// sample tile so you can see real feature counts.
 function tcpProbe(host, port, timeout) {
   return new Promise(resolve => {
     const t0 = Date.now();
@@ -252,40 +198,34 @@ function tcpProbe(host, port, timeout) {
     sock.setTimeout(timeout || 4000);
     sock.once('connect', () => finish(true));
     sock.once('timeout', () => finish(false, 'timeout'));
-    sock.once('error', e => finish(false, e.code || e.message));
+    sock.once('error', ev => finish(false, ev.code || ev.message));
   });
 }
-
 router.get('/diag', async (req, res) => {
-  const q = '[out:json][timeout:15];(way["natural"="water"](40.00,-105.30,40.05,-105.25););out geom 5;';
-  const mirrors = [];
-  for (const url of OVERPASS_MIRRORS) {
-    const host = hostOf(url);
-    const entry = { url, host, dns: {}, tcp443: null, fetch: {} };
-    // DNS
-    try { entry.dns.A    = await dns.promises.resolve4(host); } catch (e) { entry.dns.A    = 'ERR ' + (e.code || e.message); }
-    try { entry.dns.AAAA = await dns.promises.resolve6(host); } catch (e) { entry.dns.AAAA = 'ERR ' + (e.code || e.message); }
-    // Raw TCP to :443 (IPv4)
-    entry.tcp443 = await tcpProbe(host, 443, 4000);
-    // Real fetch, both methods
-    for (const method of ['GET', 'POST']) {
-      const t0 = Date.now();
-      try {
-        const json = await hitOverpass(url, q, method, ATTEMPT_MS);
-        entry.fetch[method] = { ok: true, ms: Date.now() - t0, elements: (json.elements || []).length };
-      } catch (e) {
-        entry.fetch[method] = { ok: false, ms: Date.now() - t0, error: e.message };
-      }
-    }
-    mirrors.push(entry);
-  }
-  res.json({
-    node: process.version,
-    hasGlobalFetch: typeof fetch === 'function',
+  const out = { source: 'maptiler', node: process.version, hasGlobalFetch: typeof fetch === 'function',
     dnsOrder: (dns.getDefaultResultOrder && dns.getDefaultResultOrder()) || 'unknown',
-    mirrors,
-  });
+    maptilerKeySet: !!MAPTILER_KEY, host: MT_HOST };
+  try { out.dnsA = await dns.promises.resolve4(MT_HOST); } catch (e) { out.dnsA = 'ERR ' + (e.code || e.message); }
+  out.tcp443 = await tcpProbe(MT_HOST, 443, 4000);
+  // Sample tile over Seattle / Puget Sound (z10) — should have water.
+  const z = 10, x = lon2tileX(-122.33, z), y = lat2tileY(47.61, z);
+  const t0 = Date.now();
+  try {
+    const buf = await fetchArrayBuffer(tileUrl(z, x, y), ATTEMPT_MS);
+    if (!buf) { out.sampleTile = { z, x, y, ok: true, empty: true, ms: Date.now() - t0 }; }
+    else {
+      const polys = [], lines = [];
+      decodeTile(buf, x, y, z, polys, lines);
+      out.sampleTile = { z, x, y, ok: true, ms: Date.now() - t0, bytes: buf.length, polys: polys.length, lines: lines.length };
+    }
+  } catch (e) { out.sampleTile = { z, x, y, ok: false, ms: Date.now() - t0, error: e.message }; }
+  res.json(out);
 });
 
 module.exports = router;
-module.exports.parseOverpass = parseOverpass;   // exported for unit tests
+// exported for unit tests
+module.exports.decodeTile = decodeTile;
+module.exports.collectGeo = collectGeo;
+module.exports.pickZoom   = pickZoom;
+module.exports.lon2tileX  = lon2tileX;
+module.exports.lat2tileY  = lat2tileY;
