@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.33.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.37.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -264,6 +264,28 @@
   #busyTitle{ font-size:14px; font-weight:600; letter-spacing:.04em; }
   #busySub{ font-size:11px; letter-spacing:.03em; opacity:.72; }
 
+  /* Place-mode first-time hint — a glass pill over the poster telling the user
+     they can drag to pan / scroll to zoom. Shown once per session, auto-dismiss,
+     and dismissed on the first drag/scroll. pointer-events:none so the gesture
+     passes straight through to the map. */
+  #placeHint{ position:absolute; left:50%; top:50%; transform:translate(-50%,-46%) scale(.96);
+    display:none; align-items:center; gap:14px; padding:12px 16px; border-radius:999px;
+    background:rgba(18,26,31,.72); color:#fff; backdrop-filter:blur(8px) saturate(1.1);
+    -webkit-backdrop-filter:blur(8px) saturate(1.1);
+    box-shadow:0 8px 30px rgba(0,0,0,.28), inset 0 0 0 1px rgba(255,255,255,.09);
+    font-size:13px; white-space:nowrap; pointer-events:none; opacity:0; z-index:5;
+    transition:opacity .4s ease, transform .4s ease; }
+  #placeHint.show{ opacity:1; transform:translate(-50%,-50%) scale(1); }
+  #placeHint .seg{ display:flex; align-items:center; gap:8px; }
+  #placeHint .txt{ font-weight:600; letter-spacing:.2px; }
+  #placeHint .dot{ width:4px; height:4px; border-radius:50%; background:rgba(255,255,255,.35); }
+  #placeHint svg{ display:block; }
+  #placeHint .hand{ animation:phHandDrag 1.8s ease-in-out infinite; }
+  #placeHint .harrow{ opacity:.5; }
+  #placeHint .wheel{ animation:phWheel 1.6s ease-in-out infinite; }
+  @keyframes phHandDrag{ 0%,100%{transform:translateX(-5px)} 50%{transform:translateX(5px)} }
+  @keyframes phWheel{ 0%,100%{transform:translateY(-2.5px);opacity:1} 50%{transform:translateY(2.5px);opacity:.6} }
+
   /* ---------- abstract app (same skeleton, light skin) ---------- */
   /* visibility/pointer-events now controlled by the view-port rules above */
   #absStage{ flex:1; display:flex; align-items:center; justify-content:center; padding:var(--stage-pad); }
@@ -275,7 +297,7 @@
   .fakeThumb{ width:34px; height:26px; border-radius:5px; background:var(--workspace); border:1px solid var(--rail-line); flex:0 0 auto; }
   .fakeName{ font-size:12px; font-weight:500; }
 
-  @media (prefers-reduced-motion: reduce){ #poster-shell, .preset{ transition:none; } }
+  @media (prefers-reduced-motion: reduce){ #poster-shell, .preset{ transition:none; } #placeHint .hand, #placeHint .wheel{ animation:none; } }
   @media (max-width: 860px){ #shell,#abstractShell{ flex-direction:column; } .rail{ width:100%; flex:none; border-right:0; border-bottom:1px solid var(--rail-line); } #stage{ padding:20px; } }
 
 /* ============================================================
@@ -1478,7 +1500,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.33.0', date: '2026-08-27' };
+    window.__BUILD__ = { html: 'v0.37.0', date: '2026-08-28' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1651,6 +1673,24 @@
         </svg>
         <div id="busyTitle">Creating Map</div>
         <div id="busySub">This may take a minute</div>
+      </div>
+      <div id="placeHint" role="status" aria-live="polite">
+        <span class="seg">
+          <svg class="hand" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path class="harrow" d="M3 12 H7 M3 12 l2 -2 M3 12 l2 2"/>
+            <path class="harrow" d="M21 12 H17 M21 12 l-2 -2 M21 12 l-2 2"/>
+            <path d="M9 11V7.5a1.3 1.3 0 0 1 2.6 0V11m0 -1.2a1.3 1.3 0 0 1 2.6 0V11m0 -.6a1.3 1.3 0 0 1 2.6 0v3.4a4.2 4.2 0 0 1 -4.2 4.2h-1.1a4 4 0 0 1 -2.9 -1.25l-2.3 -2.5a1.3 1.3 0 0 1 1.9 -1.75L9 12"/>
+          </svg>
+          <span class="txt">Drag to pan</span>
+        </span>
+        <span class="dot"></span>
+        <span class="seg">
+          <svg width="16" height="22" viewBox="0 0 16 22" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2.4" y="2.4" width="11.2" height="17.2" rx="5.6"/>
+            <line class="wheel" x1="8" y1="6.4" x2="8" y2="9.6"/>
+          </svg>
+          <span class="txt">Scroll to zoom</span>
+        </span>
       </div>
     </div>
   </main>
@@ -16797,7 +16837,7 @@ const lat2tileY=(lat,z)=>{ const r=lat*Math.PI/180; return (1-Math.log(Math.tan(
    so the water overlay is fetched once for the whole padded area. The visible
    window is R_W×R_H; the fetched grid is OSCAN× that. `viewDX/viewDY` are the
    window's offset inside the grid (centre by default; a drag slides them). */
-const OSCAN=1.5;
+const OSCAN=2.0;   // v0.35.0: wider margin → far fewer edge-reframes while panning
 const GRID_W=Math.round(R_W*OSCAN), GRID_H=Math.round(R_H*OSCAN);
 function makeFrame(la,lo,z){ const wx=lon2tileX(lo,z)*256, wy=lat2tileY(la,z)*256;
  const gw=GRID_W, gh=GRID_H;
@@ -17156,7 +17196,13 @@ function render(){
  L.append('text').attr('x',cx).attr('y',base+82).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','600').attr('font-size','15.5').attr('letter-spacing','1.5').attr('fill',INK).text(statLine);
  L.append('text').attr('x',cx).attr('y',base+108).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','12').attr('letter-spacing','2').attr('fill',INK).attr('opacity',0.6).text(coordLine);
 }
+/* One-shot flag: when set, the very next crossfade() renders immediately with NO
+   opacity dip. Used by the seamless Place-mode reframe so a drag-release swap has
+   zero loading feel — the old terrain stays put and the new frame replaces it in
+   a single clean paint. Consumed (reset) by the first crossfade that sees it. */
+let _skipFade=false;
 function crossfade(){ const shell=document.getElementById('poster-shell');
+ if(_skipFade){ _skipFade=false; shell.style.opacity=1; render(); return; }
  if(matchMedia('(prefers-reduced-motion: reduce)').matches){ render(); return; }
  shell.style.opacity=0.25; requestAnimationFrame(()=>{ render(); requestAnimationFrame(()=>shell.style.opacity=1); }); }
 function rebuildSynthetic(){ TER=buildSynthetic(state.seed); route=buildRoute(TER,state.seed); routeSmooth=true; routeStats=statsFromGridPts(TER,route); }
@@ -17463,8 +17509,19 @@ rz.oninput=()=>{ if(placeMode){ setPlaceZoomT(+rz.value); pushHistSoon(); return
 let placeZoomTimer=null;
 /* Fresh, centred overscan frame + refetch. Keeps a manual contour interval
    (no intervalAuto reset); the Chunk-D race guard makes rapid calls safe. */
-async function reframePlace(lat,lon,zoom){
+async function reframePlace(lat,lon,zoom,{seamless=false}={}){
  placeMode=true; TER=makeFrame(lat,lon,zoom); route=null; routeStats=null;
+ if(seamless){
+  /* Seamless reframe (drag-release / zoom-settle): DON'T blank. The new frame
+     has no data yet, so we deliberately skip the empty-frame render — the old
+     terrain stays on screen — and let the terminal load render swap it in with
+     no opacity dip (tiles are usually already cached, so the swap is instant). */
+  _skipFade=true;
+  if(typeof saveSessionSoon==='function') saveSessionSoon();
+  await tryLoadTerrain();
+  _skipFade=false;   // safety: clear if the load path never consumed it (e.g. error)
+  return;
+ }
  crossfade();
  if(typeof saveSessionSoon==='function') saveSessionSoon();
  await tryLoadTerrain();
@@ -17485,7 +17542,7 @@ function setPlaceZoomT(t,{live=false}={}){
  placeZoomTimer=setTimeout(()=>{
   if(!placeMode||!TER) return;
   const target=Math.floor(zoomFromT(state.routeZoom)+1e-9);
-  if(target!==TER.zoom) reframePlace(TER.lat,TER.lon,target);
+  if(target!==TER.zoom) reframePlace(TER.lat,TER.lon,target,{seamless:true});
   else render();     // normalise (crisp) once the gesture settles
  }, 220);
 }
@@ -17527,14 +17584,15 @@ function setPlaceZoomT(t,{live=false}={}){
   const c=frameCenterLatLon(TER); TER.lat=c.lat; TER.lon=c.lon;   // window centre is the new centre
   const maxX=Math.max(0,TER.w-R_W), maxY=Math.max(0,TER.h-R_H), m=0.18;
   const nearEdge = TER.viewDX<maxX*m || TER.viewDX>maxX*(1-m) || TER.viewDY<maxY*m || TER.viewDY>maxY*(1-m);
-  if(nearEdge){ reframePlace(c.lat,c.lon,TER.zoom); }         // recentre + refetch (restores margin)
+  if(nearEdge){ reframePlace(c.lat,c.lon,TER.zoom,{seamless:true}); }   // recentre + refetch (restores margin) — no flash
   else { render(); if(typeof saveSessionSoon==='function') saveSessionSoon(); if(state.showWater) updateFeaturesSoon(); }
  };
  posterEl.addEventListener('pointerup', endPan);
  posterEl.addEventListener('pointercancel', endPan);
 }
 /* Small read-only hook for debugging/support (and headless tests): current frame. */
-window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMode } : null;
+window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMode,
+ w:TER.w, h:TER.h, viewDX:TER.viewDX, viewDY:TER.viewDY, hasElev:!!TER.hasElev } : null;
 
 /* ==========================================================================
    MAP FEATURES (F1: water) — optional themed overlay of lakes / rivers /
@@ -17571,7 +17629,24 @@ async function updateFeatures(){
  }catch(e){ if(seq===featReq){ featData=null; if(note) note.textContent='Water data unavailable — the map is still fine.'; render(); } }
 }
 function updateFeaturesSoon(){ clearTimeout(featTimer); featTimer=setTimeout(updateFeatures,700); }
-function waterColors(){ return state.darkPoster ? { fill:'#33566a', line:'#6fa9c4' } : { fill:'#b9d4e3', line:'#6f9fba' }; }
+function waterColors(){
+ /* Water colour is DERIVED FROM THE ACTIVE PALETTE (roadmap v0.33.0) instead of
+    a fixed blue: take the ramp's highest-value stop — as if water were the top
+    of the elevation range — so it stays on-theme and contrasts the mostly
+    mid/low terrain around it. Safeguard: a near-white top stop wouldn't read as
+    water, so the lighter that stop is, the more we deepen + cool it; already
+    dark/teal tops (e.g. the ocean theme) stay essentially as the palette gives
+    them. The outline is a crisper shade of the fill for a clean shoreline. */
+ const P=state.preset, ramp=(P&&P.ramp&&P.ramp.length)?P.ramp:['#173a50'];
+ let top; try{ top=d3.color(ramp[ramp.length-1]); }catch(_){ top=null; }
+ if(!top) return state.darkPoster ? { fill:'#33566a', line:'#6fa9c4' } : { fill:'#b9d4e3', line:'#6f9fba' };
+ const lum=d3.hsl(top).l;                                   // 0 (black) … 1 (white)
+ const t=Math.max(0, Math.min(0.7, (lum-0.45)*1.3));        // 0 for dark tops → up to .7 for white
+ const deep=state.darkPoster ? '#0c2a3a' : '#3d6f8c';
+ const fill=d3.interpolateRgb(top.formatHex(), deep)(t);
+ const line=d3.interpolateRgb(fill, state.darkPoster ? '#cfe8f5' : '#20455a')(0.42);
+ return { fill, line };
+}
 {
  const wt=document.getElementById('showWater');
  if(wt){ wt.checked=!!state.showWater;
@@ -17828,7 +17903,7 @@ function parseCoords(str){
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function clearPlaceResults(){ const r=document.getElementById('placeResults'); if(r){ r.innerHTML=''; r.style.display='none'; } }
-function enterPlace(lat, lon, zoom, name, context){
+async function enterPlace(lat, lon, zoom, name, context){
  placeMode=true; currentIsDefault=false;
  rawGpx=null; gpxBbox=null; gpxHasEle=false; route=null; routeStats=null;
  const t=document.getElementById('title'); if(t){ t.value=(name||'').toUpperCase(); titleAuto=true; }
@@ -17842,8 +17917,32 @@ function enterPlace(lat, lon, zoom, name, context){
  { const rzEl=document.getElementById('routeZoom'); if(rzEl) rzEl.value=state.routeZoom;
    const rzvEl=document.getElementById('routeZoomVal'); if(rzvEl) rzvEl.textContent='z'+zc; }
  msg('','Creating map…');
- loadRouteFrame(lat, lon, zc);
+ await loadRouteFrame(lat, lon, zc);
+ showPlaceHint();   // first-time "drag to pan · scroll to zoom" nudge (once per session)
 }
+/* First-time Place hint: a glass pill over the poster. Shows ONCE per browser
+   session, auto-dismisses after a few seconds, and vanishes on the first
+   drag/scroll (the pill is pointer-events:none, so that same gesture pans/zooms). */
+let _placeHintTimer=null;
+function _placeHintSeen(){ try{ return sessionStorage.getItem('gpxsketch_place_hint')==='1'; }catch(_){ return window.__placeHintSeen===true; } }
+function _markPlaceHintSeen(){ try{ sessionStorage.setItem('gpxsketch_place_hint','1'); }catch(_){ window.__placeHintSeen=true; } }
+function hidePlaceHint(){ const el=document.getElementById('placeHint'); if(!el) return;
+ clearTimeout(_placeHintTimer);
+ el.classList.remove('show');
+ setTimeout(()=>{ if(!el.classList.contains('show')) el.style.display='none'; }, 450);
+ const poster=document.getElementById('poster');
+ if(poster){ poster.removeEventListener('pointerdown', hidePlaceHint); poster.removeEventListener('wheel', hidePlaceHint); }
+}
+function showPlaceHint(){ const el=document.getElementById('placeHint'); if(!el || _placeHintSeen()) return;
+ _markPlaceHintSeen();
+ el.style.display='flex';
+ void el.offsetWidth;                                   // reflow so the fade-in runs
+ requestAnimationFrame(()=>el.classList.add('show'));
+ clearTimeout(_placeHintTimer); _placeHintTimer=setTimeout(hidePlaceHint, 4800);
+ const poster=document.getElementById('poster');
+ if(poster){ poster.addEventListener('pointerdown', hidePlaceHint); poster.addEventListener('wheel', hidePlaceHint, {passive:true}); }
+}
+window.__showPlaceHint=showPlaceHint;   // headless-test hook
 function pickPlace(r){
  let lat=r.lat, lon=r.lon, zoom=12;
  if(r.bbox){ const fr=frameFromBbox(r.bbox, 0.15); lat=fr.centerLat; lon=fr.centerLon; zoom=fr.zoom; }
@@ -18770,7 +18869,7 @@ if(!restoreSession()) loadDefaultRoute();
                 showModal(`${MAX_ROUTES} routes is the limit for one piece, so ${noRoom} file${noRoom === 1 ? ' was' : 's were'} left out. Remove a route to make room.`);
             }
             // No separate "create" step any more — uploading is the action.
-            if (addedCount > 0) generateArt('gpx upload');
+            if (addedCount > 0) addRoutesToArt('gpx upload');
         });
 
         clearFilesButton.addEventListener('click', () => {
@@ -19139,6 +19238,12 @@ if(!restoreSession()) loadDefaultRoute();
         // ============================================================
         let gFillOn = true, gOutlineOn = false;
         function absPaths() { return fabricCanvas ? fabricCanvas.getObjects().filter(o => o.isPath) : []; }
+        /* Read-only snapshot of the drawn routes — for support + headless tests. */
+        window.__absPaths = () => absPaths().map(o => ({
+            routeUid: o.routeUid, fillColor: o.fillColor, strokeColor: o.strokeColor,
+            fillOn: o.fillOn, strokeOn: o.strokeOn, paletteIndex: o.paletteIndex,
+            angle: Math.round(o.angle || 0), left: Math.round(o.left || 0), top: Math.round(o.top || 0)
+        }));
         function paletteColorList() {
             return (activePalette && activePalette.colors)
                 ? activePalette.colors.concat(activePalette.extended || [])
@@ -20357,6 +20462,97 @@ if(!restoreSession()) loadDefaultRoute();
             }
         }
 
+        // ADD (append) newly-uploaded/imported routes to the EXISTING art without
+        // rebuilding it. Only the new files get shapes; every existing route keeps
+        // its position, colour, fill/outline and all per-route styling. Used by the
+        // GPX-upload and Strava-import paths. Reshuffle still calls generateArt()
+        // for a full, deliberate rebuild.
+        async function addRoutesToArt(reason) {
+            if (loadedFiles.length === 0) return;
+            // Nothing drawn yet → this is just a normal first generation.
+            if (!fabricCanvas || !artGenerated || !fabricCanvas.getObjects().some(o => o.isPath)) {
+                return generateArt(reason);
+            }
+            if (generating) { dbg('generate already in progress — skipped'); return; }
+            generating = true;
+            try {
+                const existingPaths = fabricCanvas.getObjects().filter(o => o.isPath);
+                const existingUids = new Set(existingPaths.map(o => o.routeUid));
+                const newFiles = loadedFiles.filter(f => !existingUids.has(ensureRouteUid(f)));
+                if (newFiles.length === 0) { dbg('append: no new routes to draw'); return; }
+
+                // Continue the file-order sequence past the existing routes.
+                const baseOrder = existingPaths.reduce((m, o) => Math.max(m, o.originalFileOrder || 0), -1) + 1;
+                let order = baseOrder;
+                const drawItems = [];
+                for (const file of newFiles) {
+                    try {
+                        const segments = extractSegments(await parseGpxData(await readFileAsText(file)));
+                        if (segments.length === 0) { console.warn(`No drawable tracks or routes found in ${file.name}. Skipping.`); continue; }
+                        const fileOrder = order++;
+                        segments.forEach((points, segIdx) => drawItems.push({
+                            points, fileName: file.name, routeUid: ensureRouteUid(file),
+                            fileOrder, id: `file-${fileOrder}-seg-${segIdx}`
+                        }));
+                    } catch (error) {
+                        dbg(`error processing ${file.name}: ${error.message}`, true);
+                        showModal(`Error processing file ${file.name}: ${error.message}`);
+                    }
+                }
+                if (drawItems.length === 0) return;
+
+                // Colour: continue past the palette slots the existing routes use, so
+                // a new route gets a fresh colour. Segments of one file share it.
+                const distinctExisting = new Set(existingPaths.map(o => o.originalFileOrder)).size;
+                const distinctTotal = distinctExisting + new Set(drawItems.map(d => d.fileOrder)).size;
+                const pool = distinctTotal > activePalette.colors.length
+                    ? activePalette.colors.concat(activePalette.extended)
+                    : activePalette.colors;
+                drawItems.forEach(item => { item.color = pool[(distinctExisting + (item.fileOrder - baseOrder)) % pool.length]; });
+
+                // Layout: size a grid for the whole collage, drop the new route(s)
+                // into the tail cells, and leave every existing shape untouched.
+                const allSlots = computeLayoutSlots(existingPaths.length + drawItems.length, fabricCanvas.width, fabricCanvas.height);
+                const slots = allSlots.slice(allSlots.length - drawItems.length);
+                const flowAngle = Math.random() * 360;
+
+                let drawErrors = 0;
+                drawItems.forEach((item, i) => {
+                    try { createPathInSlot(item, slots[i], flowAngle); }
+                    catch (e) { drawErrors++; dbg(`draw failed for ${item.id}: ${e.message}`, true); }
+                });
+
+                // Palette metadata + the global Fill/Outline toggles — applied to the
+                // NEW shapes ONLY, so existing routes' styling is never re-touched.
+                const newUids = new Set(drawItems.map(d => d.routeUid));
+                fabricCanvas.getObjects().filter(o => o.isPath && newUids.has(o.routeUid)).forEach(o => {
+                    ensureAppearance(o);
+                    o.paletteBase = o.fillBase || o.fillColor; o.paletteP = 0.5;
+                    let pi = pool.indexOf(o.paletteBase); if (pi < 0) pi = (o.originalFileOrder || 0) % pool.length;
+                    o.paletteIndex = pi;
+                    if (gOutlineOn && !o.strokeOn) {
+                        const c = pickDistinctColor(o.fillColor || o.paletteBase);
+                        o.strokeColor = c; o.strokeBase = c; o.strokeP = 0.5; if (!o.strokeW) o.strokeW = DEFAULT_STROKE_W; o.strokeOn = true;
+                    }
+                    if (!gFillOn && o.fillOn) o.fillOn = false;
+                    if (!o.fillOn && !o.strokeOn) o.fillOn = true;   // safety
+                    applyAppearance(o);
+                });
+
+                fabricCanvas.renderAll();
+                renderRouteList();
+                renderRouteStats();
+                selectRouteByUid(drawItems[0].routeUid);   // spotlight the route just added
+                pushHistory();                             // record the add; keep the undo stack
+
+                const pathCount = fabricCanvas.getObjects().filter(o => o.isPath).length;
+                dbg(`append complete (${reason || 'manual'}): +${drawItems.length} path(s), ${pathCount} total${drawErrors ? ` — ${drawErrors} ERRORS` : ''}`, drawErrors > 0);
+            } finally {
+                generating = false;
+                updateGenerateState();
+            }
+        }
+
         function extractSegments(gpxData) {
             const segments = [];
             if (gpxData.tracks) {
@@ -21220,7 +21416,7 @@ if(!restoreSession()) loadDefaultRoute();
             dbg(`strava import: ${added} added, ${skipped} already loaded, ${noRoom} over limit, ${failed} failed (${loadedFiles.length}/${MAX_ROUTES} routes)`);
             // "Add to canvas" means exactly that — draw it, don't ask again.
             if (added > 0) {
-                await generateArt('strava import');
+                await addRoutesToArt('strava import');
                 if (noRoom > 0) {
                     showModal(`Added ${added}, but ${MAX_ROUTES} routes is the limit for one piece so ${noRoom} didn't fit. Remove a route to make room.`);
                 }
