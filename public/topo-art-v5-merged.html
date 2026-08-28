@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.37.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.39.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -26,7 +26,7 @@
 <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEuUlEQVR4nLWXzW+UVRTGf+fed2ba8lH6ASUFCZFQbQSFhQFdEFuDKCokit8BKgtdQIgGNhijQOICLCZKEIx/ALERY6KAboiwQUsJUYMYowsotLS02pbOvJ2Z997j4m1LWz7bTJ9kFpN75z7Pec45d84VBqGqVkQcINeuXatLpRKPqvoy5yIAYUIwaq1BxPTmctHZ/fv3n9i1a1c0gusGOUBbW+vqTOZ6s4uyWmh4n9MwTJ9r62h9cSSnDKnp7Gx7d+bM2Z+A4F2oIF5VJxb4GIgIqmpsUCwA3d0dH1ZWzt6tqlYArly58lR19ewf8ZFzPkLE2IIwj4GqOmusYpJBZ2f7uqqq6iOmpaUlMXVq0V4w6tzkkQOIiHXeCXgtKSna09LSUiKt7a111TNnnQCvTLjYxg1vbNJ0dFx9wRQnUo8Zm1TATw6XwphaUlUFo8lk4nFjDDOIi7Hw3N6DGLABeDd2VUBmmFjiJEAVEiWxiFwIiSm3olIzKeTeIUER/uxRBjYtJHxjLtHRA2CLQEdnOig4uSrYBBr2km3ciF2+FjO3hvznW7GLVyDzHoL8wPD2yXHAWDSXgXwWu6Qeu/x5NOfR/v9iyhH1VngHRCDKIqXVmAVLyTVuAK8E9eswDywDNwDmRtyFd8DlISjBnz2Gv3QBnMeu2kRqR1Mc+ZhuG58DQ60kg7pVGa7socNT06Cvk9zBrdDbhVQvILnxI9Q7YLAtx50C1bhrE1Pir/hBYnvT1em7LpFrXI92XEQ9JDfsRkqr0Fx/fB+Mwd0FqIcgCQrR6W9wZ46j7f+AemR6BebBZTCtHPJ5tPMi7qfD6L9taDYi8dp2ghWvo/n0LcnvLkA92BT0dpHd14A78wNExJe2xL+W5u/BOYhc7KwDSRoSr24n+ebHaBSOKrp7FqDe4zFouo/8zjXo+WakbAZmTg1SvRBJFqEi+D9/Rnu7wDvM9ErM/Y8QrGzALl0VkwN3+o+7jQDFWos1KfjibeRCM9lUQPDMWyRefg8pKR0sPQfZDJrugSiPTK9AiuI1zWfuGPltBagqIpb+cIBP9+7k0uEmNs9LsOi59WjDHvC5OKcQV3QihZRXx1FqdGPtHseKWwowNmDL5i2cOHmKObWreOn305x6dhuz1OOjHDKyoDTO/zDGOc+M8khVCRJJMukevjt6nC8PHeD0sW9pz0Sc+eNvRAz+pnxKfPsNfcaJUQ6ICFGUo2RKKU/WP8HWd7Yxf/5nVJROZ8nDi1GNMPeQ1/HAMKZEBQH1HDp4gLVrnqOiopwjX3/F3Pvmx/ZPIMo7QALv6QN06Nh4hI4oLy9j757G4Z0uCpHCRq9AX5DNhs3q84LIiNMFF0V4nxsWVUjrRUTASzYb/WJ+TWdPpvv7LxhbhKq6EZviu8DagpJ7772xSdLp65d6enqOm9U1Ndl0GO4AxBqr3vtJmo5B1fvAWgfGpNOZ92tra68PP826uq5+UFFRtQvAu9CrFnxYFRsUG4Du7s59lZVV24feh8MPxfbOy6+EYfq8qiv441TVaxhm/urq6mgY5DQwogWHnGhqaipeubL+6SAIlnnvy5xzE+47Y0TFGgym1zl35tzl347XLarrV1UjIh7gf5+I6NQJKaTZAAAAAElFTkSuQmCC">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- D3 now inlined near the vendor scripts below — see end of body -->
 <style>
   /* ============================================================
@@ -285,6 +285,15 @@
   #placeHint .wheel{ animation:phWheel 1.6s ease-in-out infinite; }
   @keyframes phHandDrag{ 0%,100%{transform:translateX(-5px)} 50%{transform:translateX(5px)} }
   @keyframes phWheel{ 0%,100%{transform:translateY(-2.5px);opacity:1} 50%{transform:translateY(2.5px);opacity:.6} }
+
+  /* Type-treatment picker (U2) — a small grid, each button set in its own face */
+  #typePane{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .typebtn{ padding:10px 4px; border:1px solid var(--rail-line,rgba(0,0,0,.14)); border-radius:8px;
+    background:var(--rail-2,#fff); color:var(--text,#242424); font-size:13px; line-height:1; cursor:pointer;
+    text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    transition:border-color .15s ease, background .15s ease; }
+  .typebtn:hover{ border-color:var(--accent,#EC5A2A); }
+  .typebtn[aria-pressed="true"]{ border-color:var(--accent,#EC5A2A); box-shadow:inset 0 0 0 1px var(--accent,#EC5A2A); background:rgba(236,90,42,.08); }
 
   /* ---------- abstract app (same skeleton, light skin) ---------- */
   /* visibility/pointer-events now controlled by the view-port rules above */
@@ -1500,7 +1509,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.37.0', date: '2026-08-28' };
+    window.__BUILD__ = { html: 'v0.39.0', date: '2026-08-28' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1587,6 +1596,11 @@
         </div>
       </div>
       <button class="btn" id="diceTheme" title="Surprise me — random theme" style="width:100%; margin-top:var(--gap); display:flex; align-items:center; justify-content:center; gap:7px;"><span aria-hidden="true">&#127922;</span> Surprise me</button>
+    </div>
+
+    <div class="group">
+      <div class="label">Type</div>
+      <div id="typePane" class="presets"></div>
     </div>
 
     <div class="group">
@@ -1731,8 +1745,8 @@
             </div>
             <div class="control-group" title="Turn fill and/or outline on for all routes. Colors are auto-picked from your palette (fill and outline never match); fine-tune them in the color dock below.">
                 <label>Style</label>
-                <button id="toggleFillBtn" class="fo-toggle" aria-pressed="true" title="Fill all routes"><span class="fo-dot fo-fill" aria-hidden="true"></span>Fill</button>
-                <button id="toggleOutlineBtn" class="fo-toggle" aria-pressed="false" title="Outline all routes"><span class="fo-dot" aria-hidden="true"></span>Outline</button>
+                <button id="toggleFillBtn" class="fo-toggle" aria-pressed="true" title="Fill — applies to the selected route (or all if none selected)"><span class="fo-dot fo-fill" aria-hidden="true"></span>Fill</button>
+                <button id="toggleOutlineBtn" class="fo-toggle" aria-pressed="false" title="Outline — applies to the selected route (or all if none selected)"><span class="fo-dot" aria-hidden="true"></span>Outline</button>
             </div>
             <div class="control-group" title="Background auto-matches your palette when art is generated. Pick a color to override, or reset to auto.">
                 <label for="bgColorInput">Background</label>
@@ -16761,7 +16775,7 @@ const FRAME_PAD=0.5;
 
 let state={ preset:SIGNATURE[0], themeRef:{type:'sig',key:'relief'}, mode:SIGNATURE[0].mode,
  interval:200, weight:1.0, routeWidth:3.4, routeZoom:0.35, showRoute:true, darkPoster:false,
- bgOverride:null, lineOverride:null, seed:7, showWater:false, showStats:true, showCoords:true };
+ bgOverride:null, lineOverride:null, seed:7, showWater:false, showStats:true, showCoords:true, typePreset:'modern' };
 let TER=null, route=null, routeStats=null, routeSmooth=true;
 let currentIsDefault=false;   // true while showing the built-in Wonderland default
 let placeMode=false;          // true = Place/Explore mode (a searched location, no route overlay)
@@ -17031,14 +17045,94 @@ const svg=d3.select('#poster');
    instead of running off the edge of the 900-wide poster. There is a fixed
    ~60px of breathing room on each side, and the guardrail refuses to grow a
    third line — the second line simply ends in "…". Returns {lines, fontPx}. */
-function topoTitleLayout(raw){
- const MAXW=780, WEIGHT='800', LS=2;   // 900 poster − 60px padding each side
- const text=(raw||'').toUpperCase().replace(/\s+/g,' ').trim();
- if(!text) return {lines:[''], fontPx:46};
+/* ==========================================================================
+   TYPE TREATMENTS (U2) — full typographic looks for the poster label block.
+   Each preset drives font family, weight, case, size, letter-spacing,
+   alignment and vertical rhythm for the title / subtitle / stats / coords.
+   Font stacks all carry a system fallback so the poster still reads if a web
+   font is slow or (in the PNG export) not embedded. Serif = Georgia, a
+   web-safe face that rasterises identically everywhere.
+   ========================================================================== */
+const FF_SANS    ="'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+const FF_DISPLAY ="'Bricolage Grotesque', 'Inter', system-ui, sans-serif";
+const FF_MONO    ="'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace";
+const FF_SERIF   ="Georgia, 'Times New Roman', Times, serif";
+const TYPE_PRESETS=[
+ { key:'modern', name:'Modern', align:'center', leftX:88,
+   title:{fam:FF_SANS,w:800,ls:2,upper:true,one:46,two:34},
+   sub:{fam:FF_SANS,w:500,sz:18,ls:1,upper:false,it:false,op:.75},
+   div:{show:true,half:150,w:1,op:.4},
+   stat:{fam:FF_SANS,w:600,sz:15.5,ls:1.5,cs:'upper'},
+   coord:{fam:FF_SANS,w:500,sz:12,ls:2,cs:'none',op:.6},
+   gaps:{sub:30,div:52,stat:82,coord:108} },
+ { key:'editorial', name:'Editorial', align:'center', leftX:88,
+   title:{fam:FF_DISPLAY,w:800,ls:-0.5,upper:false,one:54,two:40},
+   sub:{fam:FF_DISPLAY,w:300,sz:20,ls:0,upper:false,it:true,op:.82},
+   div:{show:true,half:34,w:1.5,op:.5},
+   stat:{fam:FF_SANS,w:500,sz:14,ls:1.6,cs:'upper'},
+   coord:{fam:FF_SANS,w:400,sz:11.5,ls:1.6,cs:'none',op:.55},
+   gaps:{sub:34,div:60,stat:86,coord:110} },
+ { key:'technical', name:'Technical', align:'left', leftX:90, leftRule:true,
+   title:{fam:FF_MONO,w:600,ls:1,upper:true,one:32,two:26},
+   sub:{fam:FF_MONO,w:400,sz:13,ls:0.5,upper:false,it:false,op:.8},
+   div:{show:false},
+   stat:{fam:FF_MONO,w:500,sz:12.5,ls:0.5,cs:'upper'},
+   coord:{fam:FF_MONO,w:400,sz:11,ls:0.5,cs:'none',op:.6},
+   gaps:{sub:26,div:0,stat:58,coord:80} },
+ { key:'minimal', name:'Minimal', align:'center', leftX:88,
+   title:{fam:FF_SANS,w:200,ls:5,upper:true,one:30,two:24},
+   sub:{fam:FF_SANS,w:300,sz:12,ls:3,upper:true,it:false,op:.7},
+   div:{show:false},
+   stat:{fam:FF_SANS,w:300,sz:11,ls:2,cs:'upper'},
+   coord:{fam:FF_SANS,w:300,sz:9.5,ls:3,cs:'none',op:.55},
+   gaps:{sub:34,div:0,stat:64,coord:86} },
+ { key:'bold', name:'Bold', align:'center', leftX:88,
+   title:{fam:FF_DISPLAY,w:800,ls:0,upper:true,one:60,two:46},
+   sub:{fam:FF_SANS,w:600,sz:12,ls:1.6,upper:true,it:false,op:.75},
+   div:{show:true,half:370,w:3,op:1},
+   stat:{fam:FF_DISPLAY,w:700,sz:17,ls:0.2,cs:'upper'},
+   coord:{fam:FF_SANS,w:500,sz:10.5,ls:1.4,cs:'none',op:.6},
+   gaps:{sub:28,div:48,stat:76,coord:100} },
+ { key:'serif', name:'Serif', align:'center', leftX:88,
+   title:{fam:FF_SERIF,w:700,ls:0.5,upper:false,one:44,two:34},
+   sub:{fam:FF_SERIF,w:400,sz:16,ls:0,upper:false,it:true,op:.8},
+   div:{show:true,half:90,w:1,op:.35},
+   stat:{fam:FF_SERIF,w:400,sz:13,ls:1.2,cs:'upper'},
+   coord:{fam:FF_SERIF,w:400,sz:11.5,ls:0,cs:'none',it:true,op:.6},
+   gaps:{sub:32,div:56,stat:84,coord:108} },
+];
+function typePreset(){ return TYPE_PRESETS.find(p=>p.key===state.typePreset) || TYPE_PRESETS[0]; }
+function applyCase(s,cs){ if(cs==='upper') return (s||'').toUpperCase(); if(cs==='lower') return (s||'').toLowerCase(); return s||''; }
+/* Type-treatment picker: one button per preset, each set in its own typeface. */
+function buildTypeUI(){
+ const pane=document.getElementById('typePane'); if(!pane) return;
+ pane.innerHTML='';
+ TYPE_PRESETS.forEach(p=>{
+  const b=document.createElement('button'); b.type='button'; b.className='typebtn'; b.dataset.type=p.key;
+  b.textContent=p.name; b.title=p.name+' type treatment';
+  b.style.fontFamily=p.title.fam;
+  b.style.fontWeight = p.key==='minimal' ? 400 : Math.min(700, p.title.w);   // keep labels legible at small size
+  b.onclick=()=>{ if(state.typePreset===p.key) return; state.typePreset=p.key; markTypePreset(); render();
+   if(typeof saveSessionSoon==='function') saveSessionSoon(); if(typeof pushHist==='function') pushHist(); };
+  pane.appendChild(b);
+ });
+ markTypePreset();
+}
+function markTypePreset(){ const pane=document.getElementById('typePane'); if(!pane) return;
+ pane.querySelectorAll('.typebtn').forEach(b=> b.setAttribute('aria-pressed', b.dataset.type===state.typePreset ? 'true':'false')); }
+
+/* Title wrap/fit — measured in the ACTIVE treatment's font so wrapping stays
+   correct across families/weights/sizes. `t` = a treatment's `title` spec. */
+function topoTitleLayout(raw, t){
+ t = t || TYPE_PRESETS[0].title;
+ const MAXW=780;   // 900 poster − 60px padding each side
+ let text=(raw||'').replace(/\s+/g,' ').trim();
+ if(t.upper) text=text.toUpperCase();
+ if(!text) return {lines:[''], fontPx:t.one};
  const ctx=topoTitleLayout._c||(topoTitleLayout._c=document.createElement('canvas').getContext('2d'));
- const wide=(s,fs)=>{ ctx.font=WEIGHT+' '+fs+'px Inter, sans-serif'; return s?ctx.measureText(s).width+LS*Math.max(0,s.length-1):0; };
- if(wide(text,46)<=MAXW) return {lines:[text], fontPx:46};   // fits one line at full size
- const FS=34;                                                // spills → drop a size and wrap
+ const wide=(s,fs)=>{ ctx.font=t.w+' '+fs+'px '+t.fam; return s?ctx.measureText(s).width+t.ls*Math.max(0,s.length-1):0; };
+ if(wide(text,t.one)<=MAXW) return {lines:[text], fontPx:t.one};   // fits one line at full size
+ const FS=t.two;                                                    // spills → drop a size and wrap
  const trunc=s=>{ if(wide(s,FS)<=MAXW) return s; let n=s.length;
   while(n>0 && wide(s.slice(0,n).replace(/\s+$/,'')+'…',FS)>MAXW) n--;
   return s.slice(0,Math.max(0,n)).replace(/\s+$/,'')+'…'; };
@@ -17057,15 +17151,12 @@ function topoTitleLayout(raw){
  if(cur!=='' && lines.length<2) lines.push(cur);
  return {lines: lines.length?lines:[text], fontPx:FS};
 }
-/* Single-line fit-with-ellipsis for the subtitle. The subtitle is a geocoded
-   place name that can get long ("Boulder County, Colorado, United States") —
-   it's intentionally one line, so truncate it to the box instead of letting it
-   run off the poster the way the title used to. */
-function topoFitLine(raw, fontPx, weight, ls, maxW){
+/* Single-line fit-with-ellipsis for the subtitle/stat lines. */
+function topoFitLine(raw, fontPx, weight, ls, maxW, family){
  const text=(raw||'').replace(/\s+/g,' ').trim();
  if(!text) return '';
  const ctx=topoTitleLayout._c||(topoTitleLayout._c=document.createElement('canvas').getContext('2d'));
- ctx.font=weight+' '+fontPx+'px Inter, sans-serif';
+ ctx.font=weight+' '+fontPx+'px '+(family||FF_SANS);
  const wide=s=> s?ctx.measureText(s).width+ls*Math.max(0,s.length-1):0;
  if(wide(text)<=maxW) return text;
  let n=text.length;
@@ -17160,19 +17251,34 @@ function render(){
   rg.append('circle').attr('cx',route[0][0]).attr('cy',route[0][1]).attr('r',r).attr('fill',P.route);
   rg.append('circle').attr('cx',route[route.length-1][0]).attr('cy',route[route.length-1][1]).attr('r',r).attr('fill',BG).attr('stroke',P.route).attr('stroke-width',r*0.5);
  }
- const cx=450,L=svg.append('g'),FF='Inter, sans-serif';
- const TL=topoTitleLayout(document.getElementById('title').value);
+ /* ----- Label block, driven by the active TYPE TREATMENT (U2) ----- */
+ const TP=typePreset();
+ const cx=450, L=svg.append('g');
+ const TL=topoTitleLayout(document.getElementById('title').value, TP.title);
  const two=TL.lines.length>1;
- /* TITLE_PAD adds breathing room between the map and the title. One line keeps
-    the original spacing (+pad); two lines lift the first line up and reflow the
-    rest down into the bottom margin. `base` is the baseline of the LAST title line. */
  const TITLE_PAD=16;
- const firstY=(two?1016:1032)+TITLE_PAD, base=(two?1054:1032)+TITLE_PAD, lineGap=38;
+ const lineGap=Math.round(TL.fontPx*0.86);
+ /* `base` = baseline of the LAST title line; two-line lifts the first line up. */
+ const base=(two?1050:1034)+TITLE_PAD, firstY=two ? base-lineGap : base;
+ const align=TP.align, leftX=TP.leftX;
+ const anchor = align==='left' ? 'start' : 'middle';
+ /* Centering compensation: letter-spacing adds trailing space after the last
+    glyph, nudging a centre-anchored line right by ls/2 — pull it back. */
+ const xFor=ls=> align==='left' ? leftX : (cx - (ls||0)/2);
+ // Title
  TL.lines.forEach((ln,i)=>{
-  L.append('text').attr('x',cx).attr('y',firstY+i*lineGap).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','800').attr('font-size',TL.fontPx).attr('letter-spacing','2').attr('fill',INK).text(ln);
+  L.append('text').attr('x',xFor(TP.title.ls)).attr('y',firstY+i*lineGap).attr('text-anchor',anchor)
+   .attr('font-family',TP.title.fam).attr('font-weight',TP.title.w).attr('font-style',TP.title.it?'italic':'normal')
+   .attr('font-size',TL.fontPx).attr('letter-spacing',TP.title.ls).attr('fill',INK).text(ln);
  });
- L.append('text').attr('x',cx).attr('y',base+30).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','18').attr('letter-spacing','1').attr('fill',INK).attr('opacity',0.75).text(topoFitLine(document.getElementById('subtitle').value,18,'500',1,780));
- L.append('line').attr('x1',cx-150).attr('x2',cx+150).attr('y1',base+52).attr('y2',base+52).attr('stroke',INK).attr('stroke-opacity',0.4).attr('stroke-width',1);
+ // Subtitle
+ { const s=TP.sub, subMax= align==='left' ? 720 : 780;
+   let txt=applyCase(document.getElementById('subtitle').value, s.upper?'upper':'none');
+   txt=topoFitLine(txt, s.sz, s.w, s.ls, subMax, s.fam);
+   L.append('text').attr('x',xFor(s.ls)).attr('y',base+TP.gaps.sub).attr('text-anchor',anchor)
+    .attr('font-family',s.fam).attr('font-weight',s.w).attr('font-style',s.it?'italic':'normal')
+    .attr('font-size',s.sz).attr('letter-spacing',s.ls).attr('fill',INK).attr('opacity',s.op).text(txt); }
+ // Stat + coord strings (content logic unchanged)
  let statLine,coordLine;
  const coordStr=()=>{ const ns=TER.lat>=0?'N':'S',ew=TER.lon>=0?'E':'W'; return `${Math.abs(TER.lat).toFixed(4)}° ${ns}   ${Math.abs(TER.lon).toFixed(4)}° ${ew}`; };
  if(!rawGpx && !placeMode){ statLine='UPLOAD A GPX ROUTE TO GET STARTED'; coordLine=''; }
@@ -17187,14 +17293,27 @@ function render(){
   const r10=x=>Math.round(x/10)*10; statLine=`ELEVATION ${r10(TER.minFt).toLocaleString()}–${r10(TER.maxFt).toLocaleString()} FT   ·   CONTOUR ${state.interval} FT`;
   coordLine=coordStr();
  } else if(placeMode){
-  /* Place mode, terrain not (yet) drawn: show coordinates + the elevation state. */
   statLine = terrainStatus==='failed' ? 'ELEVATION UNAVAILABLE' : 'LOADING TERRAIN…';
   coordLine = coordStr();
  } else { statLine='LOADING ROUTE…'; coordLine=''; }
  if(state.showStats===false) statLine='';       // "choose what info shows" toggles
  if(state.showCoords===false) coordLine='';
- L.append('text').attr('x',cx).attr('y',base+82).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','600').attr('font-size','15.5').attr('letter-spacing','1.5').attr('fill',INK).text(statLine);
- L.append('text').attr('x',cx).attr('y',base+108).attr('text-anchor','middle').attr('font-family',FF).attr('font-weight','500').attr('font-size','12').attr('letter-spacing','2').attr('fill',INK).attr('opacity',0.6).text(coordLine);
+ // Divider / left rule
+ if(TP.leftRule){
+  const y0=firstY-Math.round(TL.fontPx*0.74), y1=base+TP.gaps.coord+4;
+  L.append('line').attr('x1',leftX-14).attr('x2',leftX-14).attr('y1',y0).attr('y2',y1).attr('stroke',INK).attr('stroke-opacity',0.5).attr('stroke-width',2);
+ } else if(TP.div && TP.div.show){
+  const half=TP.div.half; L.append('line').attr('x1',cx-half).attr('x2',cx+half).attr('y1',base+TP.gaps.div).attr('y2',base+TP.gaps.div).attr('stroke',INK).attr('stroke-opacity',TP.div.op).attr('stroke-width',TP.div.w);
+ }
+ // Stat line
+ { const s=TP.stat; const txt=applyCase(statLine, s.cs);
+   L.append('text').attr('x',xFor(s.ls)).attr('y',base+TP.gaps.stat).attr('text-anchor',anchor)
+    .attr('font-family',s.fam).attr('font-weight',s.w).attr('font-size',s.sz).attr('letter-spacing',s.ls).attr('fill',INK).text(txt); }
+ // Coord line
+ { const s=TP.coord; const txt=applyCase(coordLine, s.cs);
+   L.append('text').attr('x',xFor(s.ls)).attr('y',base+TP.gaps.coord).attr('text-anchor',anchor)
+    .attr('font-family',s.fam).attr('font-weight',s.w).attr('font-style',s.it?'italic':'normal')
+    .attr('font-size',s.sz).attr('letter-spacing',s.ls).attr('fill',INK).attr('opacity',s.op).text(txt); }
 }
 /* One-shot flag: when set, the very next crossfade() renders immediately with NO
    opacity dip. Used by the seamless Place-mode reframe so a drag-release swap has
@@ -17215,7 +17334,7 @@ function rebuildSynthetic(){ TER=buildSynthetic(state.seed); route=buildRoute(TE
 const HIST_MAX=60; let hist=[], histIdx=-1, histLock=false, histTimer=null;
 function snap(){ return JSON.stringify({ themeRef:state.themeRef, mode:state.mode, interval:state.interval,
  weight:state.weight, routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, showStats:state.showStats, showCoords:state.showCoords, darkPoster:state.darkPoster,
- bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed,
+ bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed, typePreset:state.typePreset,
  title:document.getElementById('title').value, subtitle:document.getElementById('subtitle').value }); }
 function pushHist(){ if(histLock) return; const s=snap(); if(hist[histIdx]===s) return;
  hist=hist.slice(0,histIdx+1); hist.push(s); if(hist.length>HIST_MAX) hist.shift();
@@ -17264,6 +17383,7 @@ function restore(s){ const o=JSON.parse(s); histLock=true;
    if(changed && typeof updateFeatures==='function'){ if(o.showWater) updateFeatures(); else featData=null; } }
  if(o.showStats!=null){ state.showStats=o.showStats; const el=document.getElementById('showStats'); if(el) el.checked=!!o.showStats; }
  if(o.showCoords!=null){ state.showCoords=o.showCoords; const el=document.getElementById('showCoords'); if(el) el.checked=!!o.showCoords; }
+ if(o.typePreset){ state.typePreset=o.typePreset; if(typeof markTypePreset==='function') markTypePreset(); }
  syncMode(); syncPosterMode(); markSelectedTheme(); buildColorsUI(); render();
  histLock=false; updateHistUI(); }
 function undo(){ if(histIdx>0){ histIdx--; restore(hist[histIdx]); } }
@@ -18053,7 +18173,7 @@ function saveSession(){
    lat:TER.lat, lon:TER.lon, zoom:TER.zoom, intervalAuto,
    state:{ themeRef:state.themeRef, mode:state.mode, interval:state.interval, weight:state.weight,
     routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, showStats:state.showStats, showCoords:state.showCoords, darkPoster:state.darkPoster,
-    bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed } };
+    bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed, typePreset:state.typePreset } };
   localStorage.setItem(LS_TOPO, JSON.stringify(d));
  }catch(e){ /* private mode / quota / disabled — persistence is best-effort */ }
 }
@@ -18079,6 +18199,7 @@ function restoreSession(){
   if(s.darkPoster!=null) state.darkPoster=s.darkPoster;
   state.bgOverride=s.bgOverride??null; state.lineOverride=s.lineOverride??null;
   if(s.seed!=null) state.seed=s.seed;
+  if(s.typePreset) state.typePreset=s.typePreset;
   if(d.intervalAuto!=null) intervalAuto=d.intervalAuto;
   state.preset=themeForMode(state.themeRef, state.darkPoster); state.preset.mode=state.mode;
   document.getElementById('title').value=d.title||'';
@@ -18089,7 +18210,7 @@ function restoreSession(){
   { const rwEl=document.getElementById('routeWidth'); if(rwEl){ rwEl.value=state.routeWidth; document.getElementById('routeWidthVal').textContent=(+state.routeWidth).toFixed(1); } }
   { const rzEl=document.getElementById('routeZoom'); if(rzEl){ rzEl.value=state.routeZoom; document.getElementById('routeZoomVal').textContent=Math.round((+state.routeZoom)*100)+'%'; } }
   if(typeof syncRoutePresets==='function') syncRoutePresets();
-  syncMode(); buildColorsUI(); syncPosterMode(); if(typeof markSelectedTheme==='function') markSelectedTheme();
+  syncMode(); buildColorsUI(); syncPosterMode(); if(typeof markSelectedTheme==='function') markSelectedTheme(); if(typeof markTypePreset==='function') markTypePreset();
   if(d.placeMode){
    /* Place/Explore session: a searched location with no route. Restore the
       frame and re-fetch terrain; there's no GPX to rebuild. */
@@ -18118,7 +18239,7 @@ function resetToDefault(){
  state.interval=200; state.weight=1.0; state.routeWidth=3.4; state.routeZoom=0.35; state.showRoute=true;
  state.showWater=false; featData=null; { const wt=document.getElementById('showWater'); if(wt) wt.checked=false; const fn=document.getElementById('featNote'); if(fn) fn.textContent=''; }
  state.showStats=true; state.showCoords=true; { const a=document.getElementById('showStats'); if(a) a.checked=true; const b=document.getElementById('showCoords'); if(b) b.checked=true; }
- state.bgOverride=null; state.lineOverride=null; state.seed=7; intervalAuto=true;
+ state.bgOverride=null; state.lineOverride=null; state.seed=7; intervalAuto=true; state.typePreset='modern';
  state.darkPoster=naturalDarkFor(state.themeRef);
  state.preset=themeForMode(state.themeRef, state.darkPoster); state.preset.mode=state.mode;
  document.getElementById('interval').value=200; document.getElementById('intervalVal').textContent='200 ft';
@@ -18126,13 +18247,13 @@ function resetToDefault(){
  { const rwEl=document.getElementById('routeWidth'); if(rwEl){ rwEl.value=3.4; document.getElementById('routeWidthVal').textContent='3.4'; } }
  { const rzEl=document.getElementById('routeZoom'); if(rzEl){ rzEl.value=0.35; document.getElementById('routeZoomVal').textContent='35%'; } }
  if(typeof syncRoutePresets==='function') syncRoutePresets();
- syncMode(); buildColorsUI(); syncPosterMode(); if(typeof markSelectedTheme==='function') markSelectedTheme();
+ syncMode(); buildColorsUI(); syncPosterMode(); if(typeof markSelectedTheme==='function') markSelectedTheme(); if(typeof markTypePreset==='function') markTypePreset();
  loadDefaultRoute();
  msg('ok','Reset to the default map.');
 }
 { const rb=document.getElementById('resetDefault'); if(rb) rb.onclick=resetToDefault; }
 
-rebuildSynthetic(); buildThemeUI();
+rebuildSynthetic(); buildThemeUI(); buildTypeUI();
 /* Build the opening theme through the same path as every other theme change, so
    bg/line and the Light/Dark toggle are correct from the very first frame. */
 state.darkPoster = naturalDarkFor(state.themeRef);
@@ -18784,6 +18905,7 @@ if(!restoreSession()) loadDefaultRoute();
             // single shape -> per-route sliders + colour dock follow along
             const active = fabricCanvas && fabricCanvas.getActiveObject();
             updateControlsForObject(active && active.isPath ? active : null);
+            syncGlobalToggles();   // Fill/Outline buttons reflect the selected route
         }
 
         // Called from fabric's own selection events, so clicking a shape on
@@ -18794,6 +18916,7 @@ if(!restoreSession()) loadDefaultRoute();
             selectedRouteUid = uids.size === 1 ? [...uids][0] : null;
             highlightSelectedRow();
             renderRouteStats();
+            syncGlobalToggles();   // Fill/Outline buttons reflect the clicked route
         }
 
         function highlightSelectedRow() {
@@ -19254,17 +19377,28 @@ if(!restoreSession()) loadDefaultRoute();
             return list.find(c => (c || '').toLowerCase() !== a) || list[0] || '#888888';
         }
         function syncGlobalToggles() {
-            const paths = absPaths();
-            if (paths.length) { gFillOn = paths.some(o => o.fillOn); gOutlineOn = paths.some(o => o.strokeOn); }
+            const all = absPaths();
+            // gFillOn/gOutlineOn track the whole-canvas intent (used to seed newly
+            // added routes); the BUTTON state reflects the SELECTED route when one
+            // is selected, so the toggles read as "this route" not "everything".
+            if (all.length) { gFillOn = all.some(o => o.fillOn); gOutlineOn = all.some(o => o.strokeOn); }
+            const sel = (typeof selectedRouteUid !== 'undefined' && selectedRouteUid) ? shapesForUid(selectedRouteUid) : [];
+            const scope = sel.length ? sel : all;
             const fb = document.getElementById('toggleFillBtn'), ob = document.getElementById('toggleOutlineBtn');
-            if (fb) fb.setAttribute('aria-pressed', gFillOn ? 'true' : 'false');
-            if (ob) ob.setAttribute('aria-pressed', gOutlineOn ? 'true' : 'false');
+            if (fb) fb.setAttribute('aria-pressed', scope.some(o => o.fillOn) ? 'true' : 'false');
+            if (ob) ob.setAttribute('aria-pressed', scope.some(o => o.strokeOn) ? 'true' : 'false');
         }
         function setGlobalChannel(ch, on) {
-            // Never let both channels go off — that would hide the art.
-            if (!on) { const other = ch === 'fill' ? gOutlineOn : gFillOn; if (!other) { syncGlobalToggles(); return; } }
-            if (ch === 'fill') gFillOn = on; else gOutlineOn = on;
-            absPaths().forEach(o => {
+            // Apply to the SELECTED route only; fall back to all routes when nothing
+            // is selected (so the button still does something with no selection).
+            const sel = selectedRouteUid ? shapesForUid(selectedRouteUid) : [];
+            const scoped = sel.length > 0;
+            const targets = scoped ? sel : absPaths();
+            if (!targets.length) { syncGlobalToggles(); return; }
+            // Never let both channels go off for a target — that would hide it.
+            if (!on) { const anyOther = targets.some(o => ch === 'fill' ? o.strokeOn : o.fillOn); if (!anyOther) { syncGlobalToggles(); return; } }
+            if (!scoped) { if (ch === 'fill') gFillOn = on; else gOutlineOn = on; }
+            targets.forEach(o => {
                 ensureAppearance(o);
                 if (ch === 'fill') {
                     o.fillOn = on;
