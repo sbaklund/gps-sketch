@@ -1,15 +1,23 @@
 // ======================================================================
-//  GPX Sketch  —  SERVER BUILD  v0.33.0
+//  GPX Sketch  —  SERVER BUILD  v0.37.0
 //  Keep in sync with window.__BUILD__.html (frontend) and VERSION.txt.
 // ======================================================================
 'use strict';
+
+// Prefer IPv4 for every outbound connection. Many cloud containers (Render
+// included) have working IPv4 but broken/absent IPv6 egress; Node's global
+// fetch otherwise resolves an AAAA record and dies with a bare "fetch failed"
+// (this is why Overpass was unreachable while Nominatim — hit over IPv4 — was
+// fine). Set as early as possible so it applies to every require() below too.
+try { require('node:dns').setDefaultResultOrder('ipv4first'); console.log('[boot] dns result order → ipv4first'); }
+catch (e) { console.warn('[boot] could not set dns order:', e.message); }
 
 console.log('[boot] server.js loading…');
 console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.33.0';
+const BUILD = 'v0.37.0';
 console.log('[boot] build', BUILD);
 
 /**
