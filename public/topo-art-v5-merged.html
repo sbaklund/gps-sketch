@@ -1,6 +1,6 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.40.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.44.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -236,6 +236,20 @@
   #histBar button span{ font-family:var(--mono); font-size:9px; font-weight:500; letter-spacing:.06em; text-transform:uppercase; line-height:1; }
   #histBar svg{ width:16px; height:16px; }
   #histBar .sep{ width:1px; background:rgba(255,255,255,.25); margin:6px 2px; }
+
+  /* Site watermark — subtle typewriter attribution, centred UNDER THE ARTBOARD
+     (not the viewport) so the left rail/panel doesn't make it look off-centre.
+     A direct <body> child so the #abstractShell clip-path can't clip/trap it; its
+     `left`/`bottom` are set by JS from the active artboard's rect (positioning
+     script near </body>) — values here are just the pre-JS default. Topo sits in
+     the workspace margin under the poster; Abstract is lifted clear of the
+     full-width Palette dock. pointer-events:none. Not baked into exports. */
+  #siteWatermark{ position:fixed; left:50%; bottom:9px; transform:translateX(-50%); z-index:40;
+    font-family:var(--mono); font-size:10px; letter-spacing:.14em; white-space:nowrap;
+    color:rgba(58,64,70,.40); pointer-events:none; user-select:none; transition:left .18s ease, bottom .18s ease; }
+  @media (max-width:520px){ #siteWatermark{ font-size:9px; letter-spacing:.10em; } }
+  /* Abstract shows the watermark INSIDE the Palette bar (#dockWatermark) instead. */
+  body[data-app="abstract"] #siteWatermark{ display:none; }
 
   #stage{ flex:1; display:flex; align-items:center; justify-content:center; padding:54px 16px 18px; overflow:auto; position:relative; }
   #poster-shell{ filter:drop-shadow(0 18px 40px rgba(20,30,35,.28)); transition:opacity .25s ease; width:min(820px, calc((98vh - 150px) * .75), 96%); position:relative; }
@@ -795,6 +809,14 @@
         #colorDockBar { display: flex; align-items: center; justify-content: space-between; padding: 6px 16px 4px; }
         #dockModeLabel { font-family: var(--font-display); font-weight: 600; font-size: 0.92em; letter-spacing: -0.01em; }
         #colorDockBar .cd-hint { font-family: var(--font-mono); font-size: 0.62em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+        /* Watermark lives in the Palette bar on Abstract — the flexible middle item,
+           centred between "Palette" (left) and the hover hint (right). Subtle, mono,
+           matches the hint's muted grey. Shrinks with ellipsis on narrow windows. */
+        #dockWatermark { flex: 1 1 auto; min-width: 0; text-align: center; font-family: var(--font-mono);
+            font-size: 0.64em; letter-spacing: 0.10em; color: var(--ink-3); opacity: 0.85;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 12px;
+            user-select: none; pointer-events: none; }
+        @media (max-width: 720px){ #dockWatermark { display: none; } }   /* hide when the bar gets tight */
         #colorDock { display: flex; height: 104px; user-select: none; touch-action: none; }
         .cd-sw { flex: 1 1 0; position: relative; cursor: grab; outline: none; transition: flex-grow .28s cubic-bezier(.2,.8,.2,1); }
         @media (prefers-reduced-motion: reduce) { .cd-sw { transition: none; } }
@@ -1509,7 +1531,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.40.0', date: '2026-08-28' };
+    window.__BUILD__ = { html: 'v0.44.0', date: '2026-09-20' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -1851,6 +1873,7 @@
         <div id="colorDockWrap">
             <div id="colorDockBar">
                 <span id="dockModeLabel">Palette</span>
+                <span id="dockWatermark" aria-hidden="true">created by stephen baklund · all rights reserved</span>
                 <span class="cd-hint">hover over color &nbsp;&rarr;&nbsp; drag &#8646; to shade &nbsp;&rarr;&nbsp; click for colors</span>
             </div>
             <div id="colorDock"></div>
@@ -17228,17 +17251,24 @@ function render(){
     drawn when the fetched data matches the current frame (no stale geometry). */
  if(state.showWater && featData && featData.gridKey===gridKey() && (featData.polys.length||featData.lines.length)){
   const wc=waterColors();
-  const toPath=(coords,close)=>{ let d='';
-   for(let i=0;i<coords.length;i++){ const x=lon2tileX(coords[i][0],TER.zoom)*256-TER.left, y=lat2tileY(coords[i][1],TER.zoom)*256-TER.top; d+=(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); }
-   return close ? d+'Z' : d; };
+  const proj=pt=>[ lon2tileX(pt[0],TER.zoom)*256-TER.left, lat2tileY(pt[1],TER.zoom)*256-TER.top ];
+  /* Water is drawn OVER the contours and is fully OPAQUE, so a lake — which is
+     level — covers the terrain contour lines inside it and reads as a clean flat
+     body right up to the shoreline (no topo lines crossing the water). A touch of
+     Catmull-Rom smoothing softens the shoreline/rivers so they aren't faceted. */
+  const areaCurve=d3.line().curve(d3.curveCatmullRomClosed.alpha(0.5)).x(d=>d[0]).y(d=>d[1]);
+  const riverCurve=d3.line().curve(d3.curveCatmullRom.alpha(0.5)).x(d=>d[0]).y(d=>d[1]);
   const wg=zoomG.append('g');
+  const sw=0.6/(MAP.w/DISPW)/Z;
   for(const poly of featData.polys){ if(poly.length<3) continue;
-   wg.append('path').attr('d',toPath(poly,true)).attr('fill',wc.fill).attr('fill-opacity',0.92)
-    .attr('stroke',wc.line).attr('stroke-width',0.7/(MAP.w/DISPW)/Z).attr('stroke-opacity',0.7).attr('stroke-linejoin','round'); }
+   let pts=poly.map(proj);
+   if(pts.length>2 && pts[0][0]===pts[pts.length-1][0] && pts[0][1]===pts[pts.length-1][1]) pts.pop();  // drop duplicate closing point for the closed curve
+   wg.append('path').attr('d',areaCurve(pts)+'Z').attr('fill',wc.fill)
+    .attr('stroke',wc.line).attr('stroke-width',sw).attr('stroke-linejoin','round'); }
   const lw=1.7/(MAP.w/DISPW)/Z;
   for(const ln of featData.lines){ if(ln.length<2) continue;
-   wg.append('path').attr('d',toPath(ln,false)).attr('fill','none').attr('stroke',wc.line).attr('stroke-width',lw)
-    .attr('stroke-linecap','round').attr('stroke-linejoin','round').attr('stroke-opacity',0.9); }
+   wg.append('path').attr('d',riverCurve(ln.map(proj))).attr('fill','none').attr('stroke',wc.line).attr('stroke-width',lw)
+    .attr('stroke-linecap','round').attr('stroke-linejoin','round'); }
  }
  if(state.showRoute&&route&&route.length>1){
   let pts=route;
@@ -17748,7 +17778,7 @@ async function updateFeatures(){
   render();
  }catch(e){ if(seq===featReq){ featData=null; if(note) note.textContent='Water data unavailable — the map is still fine.'; render(); } }
 }
-function updateFeaturesSoon(){ clearTimeout(featTimer); featTimer=setTimeout(updateFeatures,700); }
+function updateFeaturesSoon(){ clearTimeout(featTimer); featTimer=setTimeout(updateFeatures,350); }
 function waterColors(){
  /* Water colour is DERIVED FROM THE ACTIVE PALETTE (roadmap v0.33.0) instead of
     a fixed blue: take the ramp's highest-value stop — as if water were the top
@@ -21580,6 +21610,34 @@ if(!restoreSession()) loadDefaultRoute();
   } else {
     liftOverlay();
   }
+})();
+</script>
+<div id="siteWatermark" aria-hidden="true">created by stephen baklund · all rights reserved</div>
+<script>
+/* Position the watermark centred UNDER THE ARTBOARD of whichever app is active,
+   so the left rail (Topo) / left panel (Abstract) doesn't make it look
+   off-centre — and lift it clear of Abstract's full-width Palette dock. Runs on
+   load, resize, and whenever the active app or transition state changes. Falls
+   back to viewport-centre if the artboard can't be measured (e.g. narrow/mobile
+   stacked layout). */
+(function(){
+  function place(){
+    // Topo only — Abstract shows the watermark inside the Palette bar (#dockWatermark).
+    var wm=document.getElementById('siteWatermark'); if(!wm) return;
+    if(document.body.getAttribute('data-app')!=='topo') return;
+    var art=document.getElementById('poster-shell');
+    var r = art && art.getBoundingClientRect();
+    if(!r || r.width < 60){ wm.style.left='50%'; wm.style.bottom='9px'; return; }  // fallback: page-centre
+    wm.style.left = Math.round(r.left + r.width/2) + 'px';   // centred under the poster (transform:translateX(-50%))
+    wm.style.bottom='9px';                                    // workspace margin below the poster
+  }
+  var raf; function placeSoon(){ cancelAnimationFrame(raf); raf=requestAnimationFrame(place); }
+  window.addEventListener('resize', placeSoon);
+  window.addEventListener('load', place);
+  if(document.readyState!=='loading') place(); else document.addEventListener('DOMContentLoaded', place);
+  try{ new MutationObserver(placeSoon).observe(document.body,{attributes:true,attributeFilter:['data-app','data-transitioning']}); }catch(e){}
+  setTimeout(place,300); setTimeout(place,1200);   // catch late layout (fonts, first render)
+  window.__placeWatermark = place;   // headless-test hook
 })();
 </script>
 </body>
