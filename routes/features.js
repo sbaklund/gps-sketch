@@ -175,6 +175,13 @@ async function fetchArrayBuffer(url, timeout) {
   } catch (e) { if (to) clearTimeout(to); throw e; }
 }
 
+// In-memory decoded-tile cache (LRU). Panning a frame usually shifts by one tile,
+// so most tiles are already decoded → a big speedup + fewer MapTiler calls.
+const tileCache = new Map();          // 'z/x/y' -> { polys, lines }
+const TILE_CACHE_MAX = 600;
+function tileCacheGet(k) { const v = tileCache.get(k); if (v) { tileCache.delete(k); tileCache.set(k, v); } return v; }
+function tileCacheSet(k, v) { tileCache.set(k, v); if (tileCache.size > TILE_CACHE_MAX) tileCache.delete(tileCache.keys().next().value); }
+
 async function fetchWater(s, w, n, e) {
   if (!MAPTILER_KEY) throw new Error('MAPTILER_KEY not set');
   const z = pickZoom(s, w, n, e);
@@ -184,12 +191,21 @@ async function fetchWater(s, w, n, e) {
   const deadline = Date.now() + BUDGET_MS;
   const jobs = [];
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+    const k = z + '/' + x + '/' + y;
+    const hit = tileCacheGet(k);
+    if (hit) { for (const p of hit.polys) polys.push(p); for (const l of hit.lines) lines.push(l); continue; }
     const remaining = deadline - Date.now();
     if (remaining <= 300) break;
+    const tx = x, ty = y;
     jobs.push(
-      fetchArrayBuffer(tileUrl(z, x, y), Math.min(ATTEMPT_MS, remaining))
-        .then(buf => { if (buf && buf.length) { try { decodeTile(buf, x, y, z, polys, lines); } catch (e) { console.warn('[features] decode ' + z + '/' + x + '/' + y + ': ' + e.message); } } })
-        .catch(err => { console.warn(`[features] maptiler tile ${z}/${x}/${y} failed: ${err.message}`); })
+      fetchArrayBuffer(tileUrl(z, tx, ty), Math.min(ATTEMPT_MS, remaining))
+        .then(buf => {
+          const tp = [], tl = [];
+          if (buf && buf.length) { try { decodeTile(buf, tx, ty, z, tp, tl); } catch (e) { console.warn('[features] decode ' + z + '/' + tx + '/' + ty + ': ' + e.message); } }
+          tileCacheSet(z + '/' + tx + '/' + ty, { polys: tp, lines: tl });   // cache empty tiles too (no water there → don't refetch); network failures throw and are NOT cached
+          for (const p of tp) polys.push(p); for (const l of tl) lines.push(l);
+        })
+        .catch(err => { console.warn(`[features] maptiler tile ${z}/${tx}/${ty} failed: ${err.message}`); })
     );
   }
   await Promise.all(jobs);
@@ -204,7 +220,10 @@ router.get('/', async (req, res) => {
   let [s, w, n, e] = bbox;
   if (s > n) [s, n] = [n, s];
   if (w > e) [w, e] = [e, w];
-  if ((n - s) > 1.6 || (e - w) > 1.6) {
+  // Guard only against absurd whole-continent requests. A fully zoomed-OUT place
+  // frame (with overscan) can span several degrees — the old 1.6° cap made water
+  // vanish when zoomed out. pickZoom + MAX_TILES keep the tile fan-out bounded.
+  if ((n - s) > 12 || (e - w) > 12) {
     return res.json({ bbox: [s, w, n, e], polys: [], lines: [], note: 'area too large for feature overlay' });
   }
   const layers = new Set(String(req.query.layers || 'water').split(',').map(x => x.trim()).filter(Boolean));

@@ -1,10 +1,19 @@
+# Dependencies
 node_modules/
+
+# Secrets / local env
 .env
+.env.local
 .strava-tokens.json
 
-# Disk cache — populated at runtime, don't commit
-cache/*.json
+# Runtime cache (Render creates this at runtime; don't commit contents)
+cache/*
+!cache/.gitkeep
 
-# OS noise
+# OS / editor cruft
 .DS_Store
 Thumbs.db
+*.log
+
+# Local-only project notes (not deployed)
+docs/

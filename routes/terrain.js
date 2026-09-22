@@ -103,9 +103,9 @@ function parseParams(query) {
     throw new Error('zoom must be an integer between 7 and 13');
   }
 
-  const source = query.source ?? 'openmeteo';
-  if (!['openmeteo', 'maptiler'].includes(source)) {
-    throw new Error('source must be "openmeteo" or "maptiler"');
+  const source = query.source ?? 'auto';
+  if (!['auto', 'openmeteo', 'maptiler'].includes(source)) {
+    throw new Error('source must be "auto", "openmeteo", or "maptiler"');
   }
 
   if (source === 'maptiler' && !process.env.MAPTILER_KEY) {
@@ -113,6 +113,29 @@ function parseParams(query) {
   }
 
   return { lat, lon, zoom, source };
+}
+
+// ---------------------------------------------------------------------------
+// Automatic source resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * When the caller doesn't care which provider serves the data (source=auto,
+ * the only mode the front end uses now), prefer MapTiler's higher detail when
+ * a key is configured, and fall back to Open-Meteo automatically if that
+ * fails for any reason. The caller never needs to know which one won.
+ */
+async function resolveAuto(frame) {
+  if (process.env.MAPTILER_KEY) {
+    try {
+      const result = await maptiler.fetchElevation(frame, process.env.MAPTILER_KEY);
+      return { result, usedSource: 'maptiler' };
+    } catch (err) {
+      console.warn(`[terrain] auto: maptiler failed (${err.message}) — falling back to openmeteo`);
+    }
+  }
+  const result = await openmeteo.fetchElevation(frame);
+  return { result, usedSource: 'openmeteo' };
 }
 
 // ---------------------------------------------------------------------------
@@ -141,14 +164,20 @@ router.get('/', async (req, res) => {
     return res.json({ ...cached, cached: true });
   }
 
-  // 3. Fetch from provider
-  console.log(`[terrain] Cache miss — fetching from ${source}`);
-  let result;
+  // 3. Fetch from provider (auto picks the best available, with fallback)
+  console.log(`[terrain] Cache miss — fetching (source=${source})`);
+  let result, resolvedSource;
   try {
-    if (source === 'openmeteo') {
+    if (source === 'auto') {
+      const r = await resolveAuto(frame);
+      result = r.result;
+      resolvedSource = r.usedSource;
+    } else if (source === 'openmeteo') {
       result = await openmeteo.fetchElevation(frame);
+      resolvedSource = 'openmeteo';
     } else {
       result = await maptiler.fetchElevation(frame, process.env.MAPTILER_KEY);
+      resolvedSource = 'maptiler';
     }
   } catch (err) {
     console.error(`[terrain] Provider error (${source}):`, err.message);
@@ -166,16 +195,15 @@ router.get('/', async (req, res) => {
     width:  R_W,
     height: R_H,
     zoom,
-    source,
+    source: resolvedSource,
   };
 
   // 5. Write to disk cache
   writeCache(key, payload);
-  console.log(`[terrain] Cached → ${key}`);
+  console.log(`[terrain] Cached → ${key} (resolved: ${resolvedSource})`);
 
   // 6. Respond
   return res.json({ ...payload, cached: false });
 });
 
 module.exports = router;
-
