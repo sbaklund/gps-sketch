@@ -122,8 +122,14 @@
     busy = true; btn.disabled = true; btn.textContent = 'Preparing your print file…';
     try {
       if (!printFile) printFile = await makePrintFile(getSvg());
-      fine.textContent = `Print file ready (${printFile.width} × ${printFile.height} px). Checkout isn’t switched on yet — ordering is coming soon. `;
-      if (preview) { const a = document.createElement('a'); a.href = printFile.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open the print file'; fine.appendChild(a); }
+      btn.textContent = 'Opening secure checkout…';
+      const res = await fetch('/api/print/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product: prod, size, trim, fileId: printFile.id }) });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.url) { location.href = d.url; return; }           // off to Stripe's payment page
+      if (res.status === 400 && /print file/i.test(d.error || '')) printFile = null;   // server lost the file — remake it next time
+      fine.textContent = (d.error || 'Checkout could not be opened') + '. ';
+      if (preview) { const a = document.createElement('a'); a.href = printFile ? printFile.url : '#'; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open the print file'; if (printFile) fine.appendChild(a); }
     } catch (e) {
       console.error('[print] print file failed:', e);
       fine.textContent = 'Sorry — the print file could not be made (' + e.message + '). Please try again.';
@@ -160,6 +166,29 @@
     if (again) again.focus();                  // the buttons were redrawn — keep keyboard focus where it was
   });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) close(); });
+
+  /* ---------- back from Stripe: ?order=success&session_id=… or ?order=cancelled ---------- */
+  function notice(title, text){
+    const box = document.createElement('div'); box.id = 'ppNotice'; box.setAttribute('role', 'status');
+    const h = document.createElement('b'); h.textContent = title;
+    const p = document.createElement('span'); p.textContent = text;
+    const x = document.createElement('button'); x.type = 'button'; x.textContent = 'OK'; x.onclick = () => box.remove();
+    box.append(h, p, x); document.body.appendChild(box);
+    return p;
+  }
+  (function backFromCheckout(){
+    const q = new URLSearchParams(location.search), state = q.get('order'); if (!state) return;
+    const id = q.get('session_id');
+    q.delete('order'); q.delete('session_id');
+    history.replaceState(null, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);   // a reload must not repeat the message
+    if (state === 'cancelled') { notice('Order not placed', 'You left checkout before paying. Nothing was charged.'); return; }
+    if (state !== 'success' || !id) return;
+    const line = notice('Thank you!', 'Checking your payment…');
+    fetch('/api/print/checkout/' + encodeURIComponent(id)).then(r => r.json()).then(d => {
+      if (d.paid) line.textContent = `Payment received: $${(d.total / 100).toFixed(2)}.` + (d.test ? ' This was a TEST payment — nothing will be printed or charged.' : ' Your print is on its way to the printer.');
+      else line.textContent = 'We couldn’t confirm the payment yet. If you were charged, your order is safe — check your email for the receipt.';
+    }).catch(() => { line.textContent = 'We couldn’t confirm the payment just now. Check your email for the receipt.'; });
+  })();
 
   const topoBtn = $('printOpenTopo');
   if (topoBtn) topoBtn.addEventListener('click', () => open(window.__topoPosterNode, window.__topoPrintSvg));

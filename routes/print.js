@@ -6,7 +6,10 @@
  * The SERVER owns the price list: the page only displays it, and checkout (a later
  * step) will look prices up here again, so a customer can never set their own price.
  *
- *   GET /api/print/products → { enabled, sizes, products }
+ *   GET  /api/print/products      → { enabled, checkout, sizes, products }
+ *   POST /api/print/files         → store a print file (see below)
+ *   POST /api/print/checkout      → { url } of Stripe's payment page for one order
+ *   GET  /api/print/checkout/:id  → { paid, total, test } after the customer returns
  *
  * `enabled` is PRINT_ENABLED=1 on the server. Until checkout works end to end the
  * Print button stays hidden on the live site (Stephen can preview it with ?print=1).
@@ -53,9 +56,16 @@ function lookup(productKey, sizeKey, trimKey) {
            gelatoUid: p.uid(SIZES[i], trimKey) };
 }
 
+/** 'test', 'live' or 'off' — from the kind of Stripe key on the server. Never reveals the key. */
+function stripeMode() {
+  const k = process.env.STRIPE_SECRET_KEY || '';
+  return /^(sk|rk)_test_/.test(k) ? 'test' : /^(sk|rk)_live_/.test(k) ? 'live' : 'off';
+}
+
 router.get('/products', (req, res) => {
   res.json({
     enabled: process.env.PRINT_ENABLED === '1',
+    checkout: stripeMode(),
     currency: 'USD',
     sizes: SIZES.map(({ key, label, w, h }) => ({ key, label, w, h })),
     products: PRODUCTS.map(p => ({ key: p.key, name: p.name, blurb: p.blurb, prices: p.prices, shipping: p.shipping, days: p.days,
@@ -156,10 +166,82 @@ router.get('/files/:name', (req, res) => {
   res.set('Cache-Control', 'private, max-age=3600').type('jpeg').sendFile(p);
 });
 
+// ---------------------------------------------------------------------------
+// Checkout. Our server asks Stripe for a payment page for ONE order and sends the
+// customer there; card details never touch this site. The amount comes from the
+// price list above — the browser only says which product, size and trim.
+// Plain fetch to Stripe's API (no npm package).
+// ---------------------------------------------------------------------------
+function siteBase(req) { return (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, ''); }
+
+/** The form Stripe expects for one order's checkout page. */
+function stripeSessionParams(order, choice, fileId, base) {
+  const p = new URLSearchParams();
+  p.set('mode', 'payment');
+  p.set('line_items[0][quantity]', '1');
+  p.set('line_items[0][price_data][currency]', 'usd');
+  p.set('line_items[0][price_data][unit_amount]', String(choice.price * 100));
+  p.set('line_items[0][price_data][product_data][name]', `GPX Sketch ${choice.name.toLowerCase()}, ${choice.size}`);
+  p.set('shipping_address_collection[allowed_countries][0]', 'US');
+  p.set('shipping_options[0][shipping_rate_data][type]', 'fixed_amount');
+  p.set('shipping_options[0][shipping_rate_data][display_name]', 'Standard shipping');
+  p.set('shipping_options[0][shipping_rate_data][fixed_amount][amount]', String(choice.shipping * 100));
+  p.set('shipping_options[0][shipping_rate_data][fixed_amount][currency]', 'usd');
+  p.set('success_url', base + '/?order=success&session_id={CHECKOUT_SESSION_ID}');
+  p.set('cancel_url', base + '/?order=cancelled');
+  // What the printer needs once this is paid (read back by the payment webhook).
+  p.set('metadata[product]', order.product); p.set('metadata[size]', order.size); p.set('metadata[trim]', order.trim || '');
+  p.set('metadata[file_id]', fileId); p.set('metadata[gelato_uid]', choice.gelatoUid);
+  return p;
+}
+
+async function stripe(pathname, params) {
+  const res = await fetch('https://api.stripe.com/v1' + pathname, {
+    method: params ? 'POST' : 'GET',
+    headers: { Authorization: 'Bearer ' + process.env.STRIPE_SECRET_KEY, ...(params ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
+    body: params ? params.toString() : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data.error && data.error.message) || 'Stripe error ' + res.status);
+  return data;
+}
+
+router.post('/checkout', async (req, res) => {
+  const b = req.body || {};
+  const order = { product: String(b.product || ''), size: String(b.size || ''), trim: b.trim ? String(b.trim) : null };
+  const choice = lookup(order.product, order.size, order.trim);
+  if (!choice) return res.status(400).json({ error: 'That product isn’t available' });
+  if (!printFileExists(b.fileId)) return res.status(400).json({ error: 'The print file is missing — please try again' });
+  const mode = stripeMode();
+  if (mode === 'off') return res.status(503).json({ error: 'Checkout isn’t set up yet' });
+  // A live key takes real money: only allowed once printing is officially switched on.
+  if (mode === 'live' && process.env.PRINT_ENABLED !== '1') return res.status(503).json({ error: 'Checkout isn’t switched on yet' });
+  try {
+    const session = await stripe('/checkout/sessions', stripeSessionParams(order, choice, b.fileId, siteBase(req)));
+    res.json({ url: session.url, mode });
+  } catch (e) {
+    console.error('[print] checkout error:', e.message);
+    res.status(502).json({ error: 'The payment page could not be opened — please try again' });
+  }
+});
+
+// After Stripe sends the customer back: was it really paid?
+router.get('/checkout/:id', async (req, res) => {
+  if (!/^cs_(test|live)_[A-Za-z0-9]{10,200}$/.test(req.params.id)) return res.status(400).json({ error: 'Invalid order reference' });
+  if (stripeMode() === 'off') return res.status(503).json({ error: 'Checkout isn’t set up yet' });
+  try {
+    const s = await stripe('/checkout/sessions/' + req.params.id);
+    res.json({ paid: s.payment_status === 'paid', total: s.amount_total, test: !s.livemode });
+  } catch (e) {
+    console.error('[print] order lookup error:', e.message);
+    res.status(502).json({ error: 'Could not check the order' });
+  }
+});
+
 // A file over the size cap arrives here as an error from express.raw.
 router.use((err, req, res, next) => {
   if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'Print file is too large' });
   next(err);
 });
 
-module.exports = { router, lookup, PRODUCTS, SIZES, jpegSize, checkPrintFile, printFileExists, printFilePath };
+module.exports = { router, lookup, PRODUCTS, SIZES, stripeMode, stripeSessionParams, jpegSize, checkPrintFile, printFileExists, printFilePath };

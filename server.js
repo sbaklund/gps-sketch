@@ -204,6 +204,8 @@ app.get('/health', (req, res) => {
     time:             new Date().toISOString(),
     maptilerKeySet:   !!process.env.MAPTILER_KEY,
     stravaConfigured: !!process.env.STRAVA_CLIENT_ID,
+    stripeMode:       printShop ? printShop.stripeMode() : 'off',   // 'test' | 'live' | 'off' — never the key
+    printEnabled:     process.env.PRINT_ENABLED === '1',
     allowedOrigins:   corsOrigins,
     cachedAreas:      cacheSize,
     architecture:     'single-service',

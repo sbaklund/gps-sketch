@@ -14,7 +14,7 @@ let proc;
 
 test.before(async () => {
   proc = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore',
-    env: { ...process.env, PORT: String(PORT), STRAVA_CLIENT_ID: 'test-id', STRAVA_CLIENT_SECRET: 'x', STRAVA_MOCK: '', MAPTILER_KEY: '', CANONICAL_HOST: '', RENDER: '' } });
+    env: { ...process.env, PORT: String(PORT), STRAVA_CLIENT_ID: 'test-id', STRAVA_CLIENT_SECRET: 'x', STRAVA_MOCK: '', MAPTILER_KEY: '', CANONICAL_HOST: '', RENDER: '', STRIPE_SECRET_KEY: '', PRINT_ENABLED: '' } });
   for (let i = 0; i < 50; i++) { try { await fetch(base + '/health'); return; } catch { await new Promise(r => setTimeout(r, 100)); } }
   throw new Error('server did not start');
 });
@@ -116,4 +116,29 @@ test('print files: only a poster-shaped JPEG is accepted, and it comes back from
   assert.equal((await fetch(base + '/api/print/files/' + 'a'.repeat(32) + '.jpg')).status, 404);
   assert.equal((await fetch(base + '/api/print/files/..%2F..%2Fserver.js')).status, 404);
   fs.unlinkSync(path.join(ROOT, 'cache', 'print-files', d.id + '.jpg'));
+});
+
+test('checkout: the server sets the price, refuses unknown products, and is off without a Stripe key', async () => {
+  const { lookup, stripeSessionParams, stripeMode } = require('../routes/print');
+  const p = stripeSessionParams({ product: 'framed', size: '18x24', trim: 'black' }, lookup('framed', '18x24', 'black'), 'a'.repeat(32), 'https://example.test');
+  assert.equal(p.get('line_items[0][price_data][unit_amount]'), '11900');
+  assert.equal(p.get('shipping_options[0][shipping_rate_data][fixed_amount][amount]'), '2500');
+  assert.equal(p.get('shipping_address_collection[allowed_countries][0]'), 'US');
+  assert.equal(p.get('success_url'), 'https://example.test/?order=success&session_id={CHECKOUT_SESSION_ID}');
+  assert.match(p.get('metadata[gelato_uid]'), /^framed_poster_18x24/);
+  const was = process.env.STRIPE_SECRET_KEY;
+  process.env.STRIPE_SECRET_KEY = 'sk_test_x'; assert.equal(stripeMode(), 'test');
+  process.env.STRIPE_SECRET_KEY = 'rk_live_x'; assert.equal(stripeMode(), 'live');
+  process.env.STRIPE_SECRET_KEY = 'nonsense';  assert.equal(stripeMode(), 'off');
+  if (was === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = was;
+
+  const post = body => fetch(base + '/api/print/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  assert.equal((await post({ product: 'gold-bar', size: '18x24', fileId: 'a'.repeat(32), price: 1 })).status, 400);
+  assert.equal((await post({ product: 'paper', size: '18x24', fileId: 'a'.repeat(32) })).status, 400, 'no such print file');
+  const jpeg = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08, 4000 >> 8, 4000 & 255, 3000 >> 8, 3000 & 255, 3]), Buffer.alloc(40)]);
+  const up = await (await fetch(base + '/api/print/files', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg })).json();
+  assert.equal((await post({ product: 'paper', size: '18x24', fileId: up.id })).status, 503, 'no Stripe key on the test server');
+  fs.unlinkSync(path.join(ROOT, 'cache', 'print-files', up.id + '.jpg'));
+  assert.equal((await fetch(base + '/api/print/checkout/not-a-session')).status, 400);
+  assert.equal((await (await fetch(base + '/health')).json()).stripeMode, 'off');
 });
