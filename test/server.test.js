@@ -75,3 +75,19 @@ test('water endpoint rejects bad input and soft-fails without a key', async () =
   const r = await (await fetch(base + '/api/features?bbox=47.5,-122.3,47.6,-122.2')).json();
   assert.deepEqual(r.areas, []);
 });
+
+test('print shop: price list is served, the panel is in the page, and prices come from the server', async () => {
+  const d = await (await fetch(base + '/api/print/products')).json();
+  assert.equal(d.enabled, false, 'printing is off unless PRINT_ENABLED=1');
+  assert.deepEqual(d.products.map(p => p.key), ['paper', 'hanger', 'canvas', 'framed', 'wood']);
+  for (const p of d.products) assert.equal(p.prices.length, d.sizes.length, p.key);
+  assert.ok(!JSON.stringify(d).includes('gsm'), 'printer product ids stay on the server');
+  const html = await (await fetch(base + '/')).text();
+  assert.ok(html.includes('id="printPanel" hidden') && html.includes('id="printEntry" hidden'));
+  assert.ok(html.includes('/js/print.js?v=' + VERSION));
+  const { lookup } = require('../routes/print');
+  assert.equal(lookup('framed', '18x24', 'black').total, 119 + 25);
+  assert.match(lookup('hanger', '12x16', 'natural').gelatoUid, /^wall_hanging_poster_310-mm_natural-wood_/);
+  assert.equal(lookup('framed', '18x24', 'purple'), null);
+  assert.equal(lookup('paper', '9x9'), null);
+});

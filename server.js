@@ -30,7 +30,7 @@ console.log('[boot] build', BUILD);
  * One domain, no CORS headaches, no FRONTEND_URL to keep in sync.
  *
  * Static files:  /  → public/index.html, which loads css/app.css, js/topo.js, js/abstract.js, vendor/*
- * API:           /health, /api/features, /api/geocode, /auth/*, /api/status, /api/activities, /api/streams/*
+ * API:           /health, /api/features, /api/geocode, /api/print/products, /auth/*, /api/status, /api/activities, /api/streams/*
  */
 
 try { require('dotenv').config(); } catch(e) { console.warn('[boot] dotenv not found, skipping:', e.message); }
@@ -81,6 +81,12 @@ try {
   featuresRouter = require('./routes/features');
   console.log('[boot] routes/features loaded ✓');
 } catch(e) { console.error('[boot] WARN: cannot load routes/features:', e.message); }
+
+let printShop;
+try {
+  printShop = require('./routes/print');
+  console.log('[boot] routes/print loaded ✓');
+} catch(e) { console.error('[boot] WARN: cannot load routes/print:', e.message); }
 
 // ---------------------------------------------------------------------------
 // CORS — only needed for local dev (production is same-origin)
@@ -209,6 +215,7 @@ app.get('/health', (req, res) => {
 
 if (geocodeRouter) app.use('/api/geocode', geocodeRouter);
 if (featuresRouter) app.use('/api/features', featuresRouter);
+if (printShop) app.use('/api/print', printShop.router);
 app.use(strava.router);
 
 // 404 — but only for /api and /auth paths (static misses are already handled)

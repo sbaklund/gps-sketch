@@ -205,6 +205,11 @@
     </div>
 
     <div class="group" data-tab="save">
+      <div id="printEntry" hidden>
+        <div class="label">Print</div>
+        <div class="btns"><button class="btn primary" id="printOpenTopo">Print this poster</button></div>
+        <p class="note" style="margin-bottom:14px;">Paper, canvas, framed or wood — printed and shipped to your door.</p>
+      </div>
       <div class="label">Export</div>
       <div class="field" style="margin-bottom:10px;">
         <label for="exportSize">PNG size</label>
@@ -513,6 +518,31 @@
     <button type="button" class="abs cta" data-sheet="export" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></button>
   </nav>
 
+  <!-- ---------- print order panel (see js/print.js; hidden until opened) ---------- -->
+  <div id="printPanel" hidden role="dialog" aria-modal="true" aria-labelledby="ppTitle">
+    <div class="pp-scene">
+      <button type="button" class="pp-close" id="ppClose">&larr; Back to editing</button>
+      <div class="pp-stack">
+        <div class="pp-art" id="ppArt"><i class="pp-string"></i><i class="pp-rail t"></i><div class="pp-artin" id="ppArtIn"></div><i class="pp-rail b"></i></div>
+        <div class="pp-console"><i class="pp-books"></i><i class="pp-vase"></i></div>
+      </div>
+      <div class="pp-cap" id="ppCap"></div>
+    </div>
+    <div class="pp-opts">
+      <div><h2 id="ppTitle">Print your poster</h2><div class="pp-sub">Printed and shipped in the US. Arrives in <span id="ppDays"></span> days.</div></div>
+      <div><div class="pp-lab">Material</div><div class="pp-prods" id="ppProds"></div></div>
+      <div><div class="pp-lab">Size</div><div class="pp-pills" id="ppSizes"></div></div>
+      <div id="ppTrimRow" hidden><div class="pp-lab" id="ppTrimLab">Frame</div><div class="pp-sw" id="ppTrims"></div></div>
+      <div class="pp-sum">
+        <div class="pp-row"><span id="ppLine"></span><span id="ppPrice"></span></div>
+        <div class="pp-row"><span>Shipping</span><span id="ppShip"></span></div>
+        <div class="pp-row pp-tot"><span>Total</span><span id="ppTotal"></span></div>
+        <button type="button" class="pp-cta" id="ppCheckout">Continue to checkout</button>
+        <div class="pp-fine" id="ppFine">Secure payment by Stripe. Your design is sent to the printer exactly as shown.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ---------- undo / redo ---------- -->
   <div id="histBar" role="group" aria-label="Undo and redo">
     <button id="undoBtn" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo">
@@ -534,6 +564,7 @@
 <!-- ==== ABSTRACT APP — application logic, isolated in its own IIFE ==== -->
 <script src="/js/abstract.js?v=__V__"></script>
 <script src="/js/mobile.js?v=__V__"></script>
+<script src="/js/print.js?v=__V__"></script>
 <script>
 /* 1b fix: #stravaOverlay is authored inside #abstractShell, which carries a
    clip-path for the tab wipe transition. clip-path clips ALL descendants —
