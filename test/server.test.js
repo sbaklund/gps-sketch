@@ -85,6 +85,7 @@ test('print shop: price list is served, the panel is in the page, and prices com
   const html = await (await fetch(base + '/')).text();
   assert.ok(html.includes('id="printPanel" hidden') && html.includes('id="printEntry" hidden'));
   assert.ok(html.includes('/js/print.js?v=' + VERSION));
+  assert.ok(html.includes('id="printOpenTop"') && html.includes('id="printOpenTopo"'), 'a Print button for desktop (top bar) and for the sidebar/phone');
   const { lookup } = require('../routes/print');
   assert.equal(lookup('framed', '18x24', 'black').total, 119 + 25);
   assert.match(lookup('hanger', '12x16', 'natural').gelatoUid, /^wall_hanging_poster_310-mm_natural-wood_/);

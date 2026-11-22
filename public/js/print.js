@@ -202,7 +202,8 @@
   })();
 
   const topoBtn = $('printOpenTopo');
-  if (topoBtn) topoBtn.addEventListener('click', () => open(window.__topoPosterNode, window.__topoPrintSvg));
+  for (const b of [topoBtn, $('printOpenTop')])       // sidebar (Print section) and the top bar on desktop
+    if (b) b.addEventListener('click', () => open(window.__topoPosterNode, window.__topoPrintSvg));
 
   window.__openPrint = open; window.__closePrint = close; window.__makePrintFile = makePrintFile;   // last one: test hook
 })();

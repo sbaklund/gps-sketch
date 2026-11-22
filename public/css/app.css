@@ -125,8 +125,8 @@
   /* ---------- floating cards (sibling to Abstract's .panel-section) ---------- */
   .group{ margin-bottom:0; background:var(--card); border:1px solid var(--card-line);
     border-radius:var(--r-lg); padding:14px 15px; box-shadow:var(--card-shadow); }
-  .group > .label{ font-size:var(--fs-label); letter-spacing:var(--ls-label); text-transform:uppercase; color:var(--text-dim); display:flex; align-items:center; gap:var(--gap); margin-bottom:12px; font-family:var(--mono); font-weight:500; }
-  .group > .label::after{ content:""; flex:1; height:1px; background:var(--card-line); }
+  .group > .label, #printEntry > .label{ font-size:var(--fs-label); letter-spacing:var(--ls-label); text-transform:uppercase; color:var(--text-dim); display:flex; align-items:center; gap:var(--gap); margin-bottom:12px; font-family:var(--mono); font-weight:500; }
+  .group > .label::after, #printEntry > .label::after{ content:""; flex:1; height:1px; background:var(--card-line); }
   /* label row that carries a control on the right (e.g. the theme dice) */
   .group > .label.labelrow{ justify-content:space-between; }
   .group > .label.labelrow::after{ display:none; }
@@ -1552,6 +1552,11 @@
    PRINT ORDER PANEL (js/print.js). Full-screen: wall scene left, options right.
    The scene is drawn to scale: --u is one inch, the sideboard is 60 in wide.
    ====================================================================== */
+/* Top-bar Print button: desktop only (phones use the Save tab), Topo only, and only once printing is on. */
+#printOpenTop{ display:none; margin-left:auto; align-self:center; margin-bottom:8px; border:0; border-radius:999px; background:#EC5A2A; color:#fff;
+  font:600 13px Inter,system-ui,sans-serif; padding:8px 16px; cursor:pointer; white-space:nowrap; }
+#printOpenTop:hover{ background:#d44c1f; }
+@media (min-width:861px){ body[data-print="1"][data-app="topo"] #printOpenTop{ display:inline-block; } }
 #printPanel[hidden]{ display:none; }
 #printPanel{ position:fixed; inset:0; z-index:3000; display:grid; grid-template-columns:1fr 400px; background:#EDEDEA; color:#1b1b1a;
   font-family:Inter,system-ui,sans-serif; }
