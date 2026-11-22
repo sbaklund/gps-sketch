@@ -182,3 +182,11 @@ test('paid → printer: only Stripe-signed messages count, and a test payment be
   const r = await fetch(base + '/api/print/stripe-webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body });
   assert.equal(r.status, 503, 'hand-off is off until both keys are set');
 });
+
+test('route maps have the drag/zoom camera wired up (page + script)', async () => {
+  const html = await (await fetch(base + '/')).text();
+  assert.ok(html.includes('id="resetView"'), 'Re-centre on route button');
+  const js = await (await fetch(base + '/js/topo.js')).text();
+  assert.ok(js.includes('function camOn()') && js.includes('function loadRouteFit()'));
+  assert.ok(!/if\(!placeMode\|\|!TER\) return;/.test(js), 'pan/zoom must not be limited to searched places');
+});

@@ -373,8 +373,21 @@ function frameCenterLatLon(t){
    small visual scale (2^frac, always ≥1 so there's never an edge gap) to smooth
    between levels. Pan/zoom refetch keeps floor(eff) == TER.zoom. */
 const PLACE_ZMIN=8, PLACE_ZMAX=15;
-const zoomFromT=t=> PLACE_ZMIN + Math.max(0,Math.min(1,t))*(PLACE_ZMAX-PLACE_ZMIN);
-const tFromZoom=z=> (Math.max(PLACE_ZMIN,Math.min(PLACE_ZMAX,z))-PLACE_ZMIN)/(PLACE_ZMAX-PLACE_ZMIN);
+let camZmin=PLACE_ZMIN;       // lowest zoom the slider reaches; a very long route lowers it so the whole route still fits
+const zoomFromT=t=> camZmin + Math.max(0,Math.min(1,t))*(PLACE_ZMAX-camZmin);
+const tFromZoom=z=> (Math.max(camZmin,Math.min(PLACE_ZMAX,z))-camZmin)/(PLACE_ZMAX-camZmin);
+/* The live camera (drag to pan, wheel / pinch to zoom) runs for searched places AND for
+   real routes (Strava / GPX / the default trail). Only the synthetic demo has no camera. */
+function camOn(){ return !!TER && TER.viewDX!=null && (placeMode || !!rawGpx); }
+/* Where the camera starts for a route: centred on it, zoomed so it fills ROUTE_FILL of the map. */
+const ROUTE_FILL=0.66;
+function routeFit(){
+ const b=gpxBbox, x0=lon2tileX(b.minLon,0), x1=lon2tileX(b.maxLon,0), y0=lat2tileY(b.maxLat,0), y1=lat2tileY(b.minLat,0);
+ const f=Math.max((x1-x0)*256/R_W, (y1-y0)*256/R_H, 1e-9);            // route's share of the window at zoom 0
+ return { lat:tileY2lat((y0+y1)/2,0), lon:tileX2lon((x0+x1)/2,0), eff:Math.min(PLACE_ZMAX, Math.log2(ROUTE_FILL/f)) }; }
+const routeCamZmin=eff=> Math.max(2, Math.min(PLACE_ZMIN, Math.floor(eff)-1));
+function syncZoomUI(){ const el=document.getElementById('routeZoom'), v=document.getElementById('routeZoomVal'); if(!el||!v) return;
+ el.value=state.routeZoom; v.textContent = camOn()||placeMode||rawGpx ? 'z'+zoomFromT(state.routeZoom).toFixed(1).replace(/\.0$/,'') : Math.round((+state.routeZoom)*100)+'%'; }
 
 /* ---------- backend terrain fetch ---------- */
 // BACKEND_URL: empty in production (same-origin, single service).
@@ -682,7 +695,7 @@ function render(){
  /* Map zoom — a visual scale. Route mode zooms about the route centre; Place
     mode about the display-window centre. Clamped ≥1 so terrain always covers. */
  let Z=1, zt='';
- if(route&&route.length>1){
+ if(route&&route.length>1&&!camOn()){
   let xa=Infinity,xb=-Infinity,ya=Infinity,yb=-Infinity;
   for(const p of route){ if(p[0]<xa)xa=p[0]; if(p[0]>xb)xb=p[0]; if(p[1]<ya)ya=p[1]; if(p[1]>yb)yb=p[1]; }
   const zx=(xa+xb)/2, zy=(ya+yb)/2;
@@ -690,8 +703,8 @@ function render(){
   const t=Math.max(0,Math.min(1, state.routeZoom==null?0.35:state.routeZoom));
   Z=(0.5+0.45*t)/f0; if(Z<1) Z=1;
   if(Math.abs(Z-1)>0.001) zt=`translate(${zx},${zy}) scale(${Z}) translate(${-zx},${-zy})`;
- } else if(placeMode){
-  /* Place mode is a live camera: the "Map zoom" slider sets a continuous
+ } else if(camOn()){
+  /* Places and real routes share a live camera: the "Map zoom" slider sets a continuous
      effective tile-zoom; terrain is fetched at floor(eff) and the fractional
      part becomes a small visual scale (2^frac ∈ [1,2)) about the window centre. */
   const eff=zoomFromT(state.routeZoom==null?0.35:state.routeZoom);
@@ -704,7 +717,8 @@ function render(){
     scrolls into view instead of a blank edge. */
  const panG=mapG.append('g').attr('id','panG').attr('transform',`translate(${-vDX},${-vDY})`);
  const zoomG=panG.append('g').attr('id','zoomG'); if(zt) zoomG.attr('transform',zt);
- svg.node().style.cursor = placeMode ? 'grab' : '';
+ svg.node().style.cursor = camOn() ? 'grab' : '';
+ { const rv=document.getElementById('resetView'); if(rv) rv.style.display = (rawGpx && camOn()) ? '' : 'none'; }
  if(TER.data){
   const rampFn=d3.interpolateRgbBasis(P.ramp.length>1?P.ramp:[P.ramp[0],P.ramp[0]]);
   const lo=TER.minFt,hi=TER.maxFt,span=(hi-lo)||1,levels=d3.range(lo+state.interval,hi,state.interval);
@@ -903,7 +917,7 @@ function restore(s){ const o=JSON.parse(s); histLock=true;
  { const rwEl=document.getElementById('routeWidth'), rwv=document.getElementById('routeWidthVal');
    if(rwEl){ rwEl.value=state.routeWidth; rwv.textContent=(+state.routeWidth).toFixed(1); } }
  { const rzEl=document.getElementById('routeZoom');
-   if(rzEl){ rzEl.value=state.routeZoom; document.getElementById('routeZoomVal').textContent=Math.round((+state.routeZoom)*100)+'%'; } }
+   if(rzEl){ syncZoomUI(); } }
  if(typeof syncRoutePresets==='function') syncRoutePresets();
  document.getElementById('showRoute').checked=state.showRoute;
  if(o.showWater!=null){ const changed=state.showWater!==o.showWater; state.showWater=o.showWater;
@@ -1146,7 +1160,7 @@ document.querySelectorAll('#routePresets button').forEach(b=>{
 });
 syncRoutePresets();
 const rz=document.getElementById('routeZoom'),rzv=document.getElementById('routeZoomVal');
-rz.oninput=()=>{ if(placeMode){ setPlaceZoomT(+rz.value); pushHistSoon(); return; }
+rz.oninput=()=>{ if(camOn()){ setPlaceZoomT(+rz.value); pushHistSoon(); return; }
  state.routeZoom=+rz.value; rzv.textContent=Math.round(+rz.value*100)+'%'; render(); pushHistSoon(); };
 
 /* ---------- Place-mode live camera: zoom (slider / wheel) + drag-to-pan ----------
@@ -1158,7 +1172,9 @@ let placeZoomTimer=null;
 /* Fresh, centred overscan frame + refetch. Keeps a manual contour interval
    (no intervalAuto reset); the Chunk-D race guard makes rapid calls safe. */
 async function reframePlace(lat,lon,zoom,{seamless=false}={}){
- placeMode=true; TER=makeFrame(lat,lon,zoom); route=null; routeStats=null;
+ TER=makeFrame(lat,lon,zoom);
+ if(rawGpx){ placeMode=false; route=projectGpx(rawGpx,TER); routeSmooth=false; }   // a route map: the line moves with the camera (stats are kept)
+ else { placeMode=true; route=null; routeStats=null; }
  if(seamless){
   /* Seamless reframe (drag-release / zoom-settle): DON'T blank. The new frame
      has no data yet, so we deliberately skip the empty-frame render — the old
@@ -1183,12 +1199,12 @@ function placeZt(){ // current visual-zoom transform string about the window cen
 function setPlaceZoomT(t,{live=false}={}){
  t=Math.max(0,Math.min(1,t));
  state.routeZoom=t; rz.value=t;
- rzv.textContent='z'+Math.round(zoomFromT(t));
+ syncZoomUI();
  if(live){ const zg=document.getElementById('zoomG'); if(zg){ const z=placeZt(); if(z) zg.setAttribute('transform',z); else zg.removeAttribute('transform'); } }
  else render();
  clearTimeout(placeZoomTimer);
  placeZoomTimer=setTimeout(()=>{
-  if(!placeMode||!TER) return;
+  if(!camOn()) return;
   const target=Math.floor(zoomFromT(state.routeZoom)+1e-9);
   if(target!==TER.zoom) reframePlace(TER.lat,TER.lon,target,{seamless:true});
   else render();     // normalise (crisp) once the gesture settles
@@ -1200,15 +1216,15 @@ function setPlaceZoomT(t,{live=false}={}){
  const inMap=(x,y)=> x>=MAP.x&&x<=MAP.x+MAP.w&&y>=MAP.y&&y<=MAP.y+MAP.h;
  // Wheel to zoom — smaller steps + live transform, so it tracks the wheel.
  posterEl.addEventListener('wheel', e=>{
-  if(!placeMode||!TER) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
+  if(!camOn()) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
   e.preventDefault();
-  const step=(e.deltaY<0?1:-1)*0.4/(PLACE_ZMAX-PLACE_ZMIN);   // ~0.4 tile-levels per notch
+  const step=(e.deltaY<0?1:-1)*0.4/(PLACE_ZMAX-camZmin);   // ~0.4 tile-levels per notch
   setPlaceZoomT(state.routeZoom+step,{live:true});
  }, {passive:false});
  // Drag to pan — slides the grid inside the clip live; refetch only at the edge.
  let panning=false, pan0=null, moved=false;
  posterEl.addEventListener('pointerdown', e=>{
-  if(!placeMode||!TER) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
+  if(!camOn()) return; const p=posterPt(e); if(!inMap(p.x,p.y)) return;
   panning=true; moved=false;
   pan0={ cx:e.clientX, cy:e.clientY, rw:p.rw, rh:p.rh, vdx:TER.viewDX||0, vdy:TER.viewDY||0,
          gpp:(R_W/MAP.w)/Math.max(R_W/GRID_W,Math.pow(2, zoomFromT(state.routeZoom)-TER.zoom)) }; // grid-px per poster-unit ÷ zoom
@@ -1241,21 +1257,21 @@ function setPlaceZoomT(t,{live=false}={}){
  const fingers=new Map(); let pinch0=null;
  const spread=()=>{ const [a,b]=[...fingers.values()]; return Math.hypot(a.x-b.x,a.y-b.y); };
  posterEl.addEventListener('pointerdown', e=>{
-  if(e.pointerType!=='touch'||!placeMode||!TER) return;
+  if(e.pointerType!=='touch'||!camOn()) return;
   fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});
   if(fingers.size===2){ endPan(e); pinch0={ d:spread(), t:state.routeZoom }; }   // second finger: stop panning, start zooming
  });
  posterEl.addEventListener('pointermove', e=>{
   if(!fingers.has(e.pointerId)) return;
   fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-  if(fingers.size===2&&pinch0&&pinch0.d>0) setPlaceZoomT(pinch0.t+Math.log2(spread()/pinch0.d)/(PLACE_ZMAX-PLACE_ZMIN),{live:true});
+  if(fingers.size===2&&pinch0&&pinch0.d>0) setPlaceZoomT(pinch0.t+Math.log2(spread()/pinch0.d)/(PLACE_ZMAX-camZmin),{live:true});
  });
  const endPinch=e=>{ fingers.delete(e.pointerId); if(fingers.size<2) pinch0=null; };
  posterEl.addEventListener('pointerup', endPinch);
  posterEl.addEventListener('pointercancel', endPinch);
 }
 /* Small read-only hook for debugging/support (and headless tests): current frame. */
-window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMode,
+window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMode, cam:camOn(), camZmin, t:state.routeZoom, routePts:route?route.length:0,
  w:TER.w, h:TER.h, viewDX:TER.viewDX, viewDY:TER.viewDY, hasElev:!!TER.hasElev } : null;
 
 /* ==========================================================================
@@ -1378,7 +1394,7 @@ async function tryLoadTerrain(){
   terrainStatus='ok';
   { const rEl=document.getElementById('retryElev'); if(rEl) rEl.style.display='none'; }
   applyAutoInterval(minFt,maxFt);
-  if(route&&rawGpx) routeStats=gpxStatsWithTerrain(rawGpx,route,TER);
+  if(route&&rawGpx&&(TER.fit||!routeStats||routeStats.gain==null)) routeStats=gpxStatsWithTerrain(rawGpx,route,TER);
   const tag=cached?' (cached)':'';
   if(routeStats) msg('ok',`Loaded${tag} · route ${routeStats.miles.toFixed(1)} mi${routeStats.gain!=null?' · +'+Math.round(routeStats.gain).toLocaleString()+' ft':''}.`);
   else msg('ok',`Loaded${tag} · ${Math.round(minFt).toLocaleString()}–${Math.round(maxFt).toLocaleString()} ft.`); crossfade();
@@ -1409,14 +1425,23 @@ async function tryLoadTerrain(){
 /* Loads a route frame centred on given coordinates and kicks off the elevation
    fetch. Called automatically after a GPX/Strava import — no manual lat/lon/
    zoom entry needed; the frame is derived from the route's own bounding box. */
-async function loadRouteFrame(lat,lon,z){
+async function loadRouteFrame(lat,lon,z,{fit=false,stats=null}={}){
  intervalAuto=true;
- TER=makeFrame(lat,lon,z);
- if(rawGpx){ route=projectGpx(rawGpx,TER); routeSmooth=false; routeStats=gpxStatsBase(rawGpx); } else { route=null; routeStats=null; }
+ TER=makeFrame(lat,lon,z); TER.fit=fit;
+ if(rawGpx){ route=projectGpx(rawGpx,TER); routeSmooth=false; routeStats=gpxStatsBase(rawGpx);
+  if(stats&&routeStats.gain==null&&stats.gain!=null){ routeStats.gain=stats.gain; routeStats.high=stats.high; } }   // restored panned view: reuse the saved climb
+ else { route=null; routeStats=null; }
  crossfade();
  /* Persist the frame + route now, so it survives even if terrain is slow/down. */
  if(typeof saveSessionSoon==='function') saveSessionSoon();
  await tryLoadTerrain(); }
+/* Frame the current route: centre on it, zoom to fit, point the slider there. */
+async function loadRouteFit(){
+ const f=routeFit(); camZmin=routeCamZmin(f.eff); state.routeZoom=tFromZoom(f.eff); syncZoomUI();
+ await loadRouteFrame(f.lat, f.lon, Math.floor(f.eff+1e-9), {fit:true});
+ showPlaceHint();   // "drag to pan · scroll to zoom" nudge, once per session
+}
+{ const rv=document.getElementById('resetView'); if(rv) rv.onclick=()=>{ if(!rawGpx) return; loadRouteFit().then(()=>pushHistSoon()); }; }
 document.getElementById('retryElev').onclick=async()=>{
  if(!rawGpx){ msg('warn','Upload a GPX route first.'); return; }
  await tryLoadTerrain(); };
@@ -1471,7 +1496,7 @@ async function loadStravaActivity(id,name){
   const t0=document.getElementById('title');
   if(titleAuto){ t0.value=name.toUpperCase(); }
   reverseGeocode(fr.centerLat, fr.centerLon, routeHighPoint(rawGpx));
-  await loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom);
+  await loadRouteFit();
   console.log('[TOPO] loadRouteFrame DONE — route should be visible');
  }catch(err){ console.error('[TOPO] loadStravaActivity FAILED:', err); msg('warn','Could not load Strava route: '+err.message); } }
 window._loadTopoStravaRoute = loadStravaActivity;
@@ -1550,7 +1575,7 @@ document.getElementById('gpxInput').onchange=async e=>{
   const fr=frameFromBbox(gpxBbox,FRAME_PAD);
   const t0=document.getElementById('title'); if(titleAuto){ t0.value=f.name.replace(/\.(gpx|xml)$/i,'').replace(/[_-]/g,' ').toUpperCase(); }
   reverseGeocode(fr.centerLat, fr.centerLon, routeHighPoint(rawGpx));
-  await loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom);
+  await loadRouteFit();
  }catch(err){ msg('warn','Could not read GPX: '+err.message); } };
 
 /* ==========================================================================
@@ -1571,7 +1596,7 @@ function parseCoords(str){
 function escapeHtml(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function clearPlaceResults(){ const r=document.getElementById('placeResults'); if(r){ r.innerHTML=''; r.style.display='none'; } }
 async function enterPlace(lat, lon, zoom, name, context){
- placeMode=true; currentIsDefault=false;
+ placeMode=true; currentIsDefault=false; camZmin=PLACE_ZMIN;
  rawGpx=null; gpxBbox=null; gpxHasEle=false; route=null; routeStats=null;
  const t=document.getElementById('title'); if(t){ t.value=(name||'').toUpperCase(); titleAuto=true; }
  const sub=document.getElementById('subtitle'); if(sub){ sub.value=context||''; subtitleAuto=true; }
@@ -1691,7 +1716,7 @@ function loadDefaultRoute(){
   if(sub) sub.value='Mt Rainier National Park';
   const gn=document.getElementById('gpxName'); if(gn) gn.textContent='Wonderland Trail · '+rawGpx.length.toLocaleString()+' pts · has elevation';
   const fr=frameFromBbox(gpxBbox,FRAME_PAD);
-  return loadRouteFrame(fr.centerLat, fr.centerLon, fr.zoom).then(()=>{ hist=[]; histIdx=-1; pushHist(); updateHistUI(); });
+  return loadRouteFit().then(()=>{ hist=[]; histIdx=-1; pushHist(); updateHistUI(); });
  }catch(e){ console.warn('[TOPO] default route load failed:', e.message); }
 }
 
@@ -1719,7 +1744,8 @@ function saveSession(){
    title:document.getElementById('title').value, subtitle:document.getElementById('subtitle').value,
    titleAuto, subtitleAuto,
    gpxName:document.getElementById('gpxName').textContent,
-   lat:TER.lat, lon:TER.lon, zoom:TER.zoom, intervalAuto,
+   lat:TER.lat, lon:TER.lon, zoom:TER.zoom, intervalAuto, cam:2,
+   stats: routeStats&&routeStats.gain!=null ? {gain:routeStats.gain, high:routeStats.high} : null,
    state:{ themeRef:state.themeRef, mode:state.mode, interval:state.interval, weight:state.weight,
     routeWidth:state.routeWidth, routeZoom:state.routeZoom, showRoute:state.showRoute, showWater:state.showWater, showStats:state.showStats, showCoords:state.showCoords, darkPoster:state.darkPoster,
     bgOverride:state.bgOverride, lineOverride:state.lineOverride, seed:state.seed, typePreset:state.typePreset } };
@@ -1757,13 +1783,13 @@ function restoreSession(){
   document.getElementById('interval').value=state.interval; document.getElementById('intervalVal').textContent=state.interval+' ft';
   document.getElementById('weight').value=state.weight; document.getElementById('weightVal').textContent=(+state.weight).toFixed(1);
   { const rwEl=document.getElementById('routeWidth'); if(rwEl){ rwEl.value=state.routeWidth; document.getElementById('routeWidthVal').textContent=(+state.routeWidth).toFixed(1); } }
-  { const rzEl=document.getElementById('routeZoom'); if(rzEl){ rzEl.value=state.routeZoom; document.getElementById('routeZoomVal').textContent=Math.round((+state.routeZoom)*100)+'%'; } }
+  { const rzEl=document.getElementById('routeZoom'); if(rzEl){ syncZoomUI(); } }
   if(typeof syncRoutePresets==='function') syncRoutePresets();
   syncMode(); buildColorsUI(); syncPosterMode(); if(typeof markSelectedTheme==='function') markSelectedTheme(); if(typeof markTypePreset==='function') markTypePreset();
   if(d.placeMode){
    /* Place/Explore session: a searched location with no route. Restore the
       frame and re-fetch terrain; there's no GPX to rebuild. */
-   placeMode=true; currentIsDefault=false; rawGpx=null; gpxBbox=null; gpxHasEle=false;
+   placeMode=true; currentIsDefault=false; rawGpx=null; gpxBbox=null; gpxHasEle=false; camZmin=PLACE_ZMIN; syncZoomUI();
    const gn=document.getElementById('gpxName'); if(gn && d.gpxName) gn.textContent=d.gpxName;
    loadRouteFrame(d.lat, d.lon, d.zoom).then(()=>{ hist=[]; histIdx=-1; pushHist(); updateHistUI(); });
    return true;
@@ -1776,7 +1802,10 @@ function restoreSession(){
   }
   gpxBbox=bboxOf(rawGpx);
   const gn=document.getElementById('gpxName'); if(gn && d.gpxName) gn.textContent=d.gpxName;
-  loadRouteFrame(d.lat, d.lon, d.zoom).then(()=>{ hist=[]; histIdx=-1; pushHist(); updateHistUI(); });
+  const done=()=>{ hist=[]; histIdx=-1; pushHist(); updateHistUI(); };
+  if(d.cam===2){ camZmin=routeCamZmin(routeFit().eff); syncZoomUI();           // saved with the camera: restore the exact view
+   loadRouteFrame(d.lat, d.lon, d.zoom, {stats:d.stats}).then(done); }
+  else loadRouteFit().then(done);                                              // saved before routes had a camera: start fitted
   return true;
  }catch(e){ console.warn('[TOPO] restore failed:', e.message); return false; }
 }
