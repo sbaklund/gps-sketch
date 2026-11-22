@@ -91,3 +91,29 @@ test('print shop: price list is served, the panel is in the page, and prices com
   assert.equal(lookup('framed', '18x24', 'purple'), null);
   assert.equal(lookup('paper', '9x9'), null);
 });
+
+test('print files: only a poster-shaped JPEG is accepted, and it comes back from its private address', async () => {
+  const { jpegSize, checkPrintFile } = require('../routes/print');
+  // Smallest believable JPEG header: start marker + a start-of-frame block carrying height and width.
+  const jpeg = (w, h) => Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08, h >> 8, h & 255, w >> 8, w & 255, 3]), Buffer.alloc(40)]);
+  assert.deepEqual(jpegSize(jpeg(3600, 4800)), { w: 3600, h: 4800 });
+  assert.equal(checkPrintFile(jpeg(3600, 4800)), null);
+  assert.match(checkPrintFile(jpeg(4800, 3600)), /3:4/);
+  assert.match(checkPrintFile(jpeg(300, 400)), /wrong size/);
+  assert.match(checkPrintFile(Buffer.from('<html>hello</html>')), /Not a JPEG/);
+
+  const post = (body, type) => fetch(base + '/api/print/files', { method: 'POST', headers: { 'Content-Type': type }, body });
+  assert.equal((await post(Buffer.from('nope'), 'image/jpeg')).status, 400);
+  assert.equal((await post('{}', 'application/json')).status, 415);
+  const ok = await post(jpeg(3000, 4000), 'image/jpeg');
+  assert.equal(ok.status, 200);
+  const d = await ok.json();
+  assert.match(d.id, /^[0-9a-f]{32}$/);
+  assert.equal(d.width, 3000);
+  const got = await fetch(base + '/api/print/files/' + d.id + '.jpg');
+  assert.equal(got.status, 200);
+  assert.equal(got.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await fetch(base + '/api/print/files/' + 'a'.repeat(32) + '.jpg')).status, 404);
+  assert.equal((await fetch(base + '/api/print/files/..%2F..%2Fserver.js')).status, 404);
+  fs.unlinkSync(path.join(ROOT, 'cache', 'print-files', d.id + '.jpg'));
+});

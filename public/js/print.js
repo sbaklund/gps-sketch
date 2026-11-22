@@ -3,8 +3,9 @@
    material and size, with the price. Prices come from the server
    (/api/print/products) — nothing here decides what anything costs.
 
-   An app opens it with  window.__openPrint(() => posterNode)  where posterNode
-   is a fresh copy of its poster (an <svg> or <img>) in the 3:4 poster shape.
+   An app opens it with  window.__openPrint(() => posterNode, () => svgText):
+   posterNode is a fresh copy of its poster for the preview, svgText is the same
+   poster as SVG source for the print file. Both are the 3:4 poster shape.
    The scene is drawn in CSS for now; a photo can replace .pp-scene later.
    ====================================================================== */
 (function(){
@@ -52,7 +53,85 @@
     $('ppCap').textContent = `Shown to scale · ${s.label} above a ${CONSOLE_IN / 12} ft sideboard`;
   }
 
-  function open(getNode){
+  /* ---------- print file ----------
+     The poster SVG is drawn onto a big canvas and saved as one JPEG. An SVG used as a
+     picture can't see the page's web fonts, so the fonts it uses are copied INTO it first. */
+  const PRINT_SIZES = [[3600, 4800], [3000, 4000]];   // 3:4. Second size is for phones that refuse very large canvases.
+
+  function inRange(ranges, cp){
+    return ranges.some(r => { const m = /^U\+([0-9A-F?]+)(?:-([0-9A-F]+))?$/i.exec(r.trim()); if (!m) return false;
+      const lo = parseInt(m[1].replace(/\?/g, '0'), 16), hi = m[2] ? parseInt(m[2], 16) : parseInt(m[1].replace(/\?/g, 'F'), 16);
+      return cp >= lo && cp <= hi; });
+  }
+  async function toDataUrl(url){
+    const buf = new Uint8Array(await (await fetch(url)).arrayBuffer()); let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    return 'data:font/woff2;base64,' + btoa(bin);
+  }
+  async function embedFonts(svgText){
+    const link = document.querySelector('link[rel="stylesheet"][href*="fonts.googleapis.com"]');
+    if (!link) throw new Error('font list not found');
+    const res = await fetch(link.href); if (!res.ok) throw new Error('font list did not load');
+    const css = await res.text();
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const chars = [...new Set(doc.documentElement.textContent || '')].map(c => c.codePointAt(0));
+    const faces = [];
+    for (const block of css.match(/@font-face\s*{[^}]*}/g) || []) {
+      const fam = (/font-family:\s*['"]?([^;'"]+)/.exec(block) || [])[1];
+      const url = (/url\((https:[^)]+)\)/.exec(block) || [])[1];
+      if (!fam || !url || !svgText.includes(fam.trim())) continue;
+      const range = (/unicode-range:\s*([^;}]+)/.exec(block) || [])[1];
+      if (range && !chars.some(cp => inRange(range.split(','), cp))) continue;
+      faces.push(block.replace(url, await toDataUrl(url)));
+    }
+    if (!faces.length) throw new Error('no fonts matched the poster');
+    return svgText.replace(/(<svg\b[^>]*>)/, '$1<style>' + faces.join('\n') + '</style>');
+  }
+  function rasterize(svgText, w, h){
+    return new Promise((resolve, reject) => {
+      const src = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' })), img = new Image();
+      const done = () => URL.revokeObjectURL(src);
+      img.onerror = () => { done(); reject(new Error('poster could not be drawn')); };
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const ctx = c.getContext('2d'); if (!ctx) throw new Error('canvas too large');
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+          c.toBlob(b => { done(); (b && b.size > 20000) ? resolve(b) : reject(new Error('canvas too large')); }, 'image/jpeg', 0.92);
+        } catch (e) { done(); reject(e); }
+      };
+      img.src = src;
+    });
+  }
+  /** Makes the print JPEG from poster SVG text and uploads it. → { id, url, width, height, bytes } */
+  async function makePrintFile(svgText){
+    const withFonts = await embedFonts(svgText);        // never print with fallback fonts — fail instead
+    let blob = null, lastErr = null;
+    for (const [w, h] of PRINT_SIZES) { try { blob = await rasterize(withFonts, w, h); break; } catch (e) { lastErr = e; } }
+    if (!blob) throw lastErr || new Error('could not make the print file');
+    const res = await fetch('/api/print/files', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'upload failed');
+    return d;
+  }
+
+  let getSvg = null, printFile = null, busy = false;
+  async function checkout(){
+    if (busy) return;
+    const btn = $('ppCheckout'), fine = $('ppFine');
+    busy = true; btn.disabled = true; btn.textContent = 'Preparing your print file…';
+    try {
+      if (!printFile) printFile = await makePrintFile(getSvg());
+      fine.textContent = `Print file ready (${printFile.width} × ${printFile.height} px). Checkout isn’t switched on yet — ordering is coming soon. `;
+      if (preview) { const a = document.createElement('a'); a.href = printFile.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open the print file'; fine.appendChild(a); }
+    } catch (e) {
+      console.error('[print] print file failed:', e);
+      fine.textContent = 'Sorry — the print file could not be made (' + e.message + '). Please try again.';
+    } finally { busy = false; btn.disabled = false; btn.textContent = 'Continue to checkout'; }
+  }
+
+  function open(getNode, getSvgText){
+    getSvg = getSvgText || null; printFile = null;
     if (!cat) return;
     let node = null; try { node = getNode && getNode(); } catch (e) { console.error('[print] could not copy the poster:', e); }
     if (!node) return;
@@ -74,7 +153,7 @@
   panel.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.id === 'ppClose') return close();
-    if (b.id === 'ppCheckout') { $('ppFine').textContent = 'Checkout isn’t switched on yet — ordering is coming soon.'; return; }
+    if (b.id === 'ppCheckout') { if (getSvg) checkout(); return; }
     if (b.dataset.prod) prod = b.dataset.prod; else if (b.dataset.size) size = b.dataset.size; else if (b.dataset.trim) trim = b.dataset.trim; else return;
     draw();
     const again = panel.querySelector(`[data-${b.dataset.prod ? 'prod' : b.dataset.size ? 'size' : 'trim'}="${b.dataset.prod || b.dataset.size || b.dataset.trim}"]`);
@@ -83,7 +162,7 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) close(); });
 
   const topoBtn = $('printOpenTopo');
-  if (topoBtn) topoBtn.addEventListener('click', () => open(window.__topoPosterNode));
+  if (topoBtn) topoBtn.addEventListener('click', () => open(window.__topoPosterNode, window.__topoPrintSvg));
 
-  window.__openPrint = open; window.__closePrint = close;
+  window.__openPrint = open; window.__closePrint = close; window.__makePrintFile = makePrintFile;   // last one: test hook
 })();

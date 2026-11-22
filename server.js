@@ -104,9 +104,10 @@ const corsOptions = {
   origin(origin, callback) {
     if (!origin) return callback(null, true);          // curl, Postman, same-origin
     if (corsOrigins.includes(origin)) return callback(null, true);
+    if (CANONICAL_HOST && origin === 'https://' + CANONICAL_HOST) return callback(null, true);   // the site's own POSTs carry an Origin header
     callback(new Error(`CORS: origin not allowed — ${origin}`));
   },
-  methods: ['GET', 'OPTIONS'],
+  methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type'],
 };
 

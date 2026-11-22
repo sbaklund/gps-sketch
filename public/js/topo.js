@@ -1659,6 +1659,7 @@ async function runPlaceSearch(q){
 function download(name,blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
 function serialized(){ const c=svg.node().cloneNode(true); c.setAttribute('xmlns','http://www.w3.org/2000/svg'); return '<?xml version="1.0" encoding="UTF-8"?>\n'+new XMLSerializer().serializeToString(c); }
 window.__topoPosterNode=()=>svg.node().cloneNode(true);   // print panel (js/print.js) shows a live copy of the poster
+window.__topoPrintSvg=()=>serialized();                    // …and builds the print file from the same SVG
 function pkey(){ return (state.preset.key||'art').replace(/[^a-z0-9]+/gi,'-').toLowerCase(); }
 document.getElementById('dlSvg').onclick=()=>download(`gpxsketch-topo-${pkey()}.svg`, new Blob([serialized()],{type:'image/svg+xml'}));
 /* PNG export sizes. Poster is 3:4 (900×1200 viewBox), so every print size is a
