@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ==================================================================== -->
-<!--  GPX Sketch  —  FRONTEND BUILD  v0.45.0                              -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.46.0                              -->
 <!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
 <!-- ==================================================================== -->
 <html lang="en">
@@ -1531,7 +1531,7 @@
        backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
   <script>
     // BUILD is bumped on every code export. Compare against server /health.
-    window.__BUILD__ = { html: 'v0.45.0', date: '2026-11-22' };
+    window.__BUILD__ = { html: 'v0.46.0', date: '2026-11-22' };
     (function(){
       const el = document.getElementById('buildStamp');
       if(!el) return;
@@ -2737,7 +2737,7 @@ function render(){
  /* Water overlay (F1) — drawn over the terrain so lakes/rivers read as water,
     under the route line. Projected into TER space with the frame math; only
     drawn when the fetched data matches the current frame (no stale geometry). */
- if(state.showWater && featData && featData.gridKey===gridKey() && (featData.polys.length||featData.lines.length)){
+ if(state.showWater && featData && featData.gridKey===gridKey() && (featData.areas.length||featData.lines.length)){
   const wc=waterColors();
   const proj=pt=>[ lon2tileX(pt[0],TER.zoom)*256-TER.left, lat2tileY(pt[1],TER.zoom)*256-TER.top ];
   /* Water is drawn OVER the contours and is fully OPAQUE, so a lake — which is
@@ -2748,11 +2748,29 @@ function render(){
   const riverCurve=d3.line().curve(d3.curveCatmullRom.alpha(0.5)).x(d=>d[0]).y(d=>d[1]);
   const wg=zoomG.append('g');
   const sw=0.6/(MAP.w/DISPW)/Z;
-  for(const poly of featData.polys){ if(poly.length<3) continue;
-   let pts=poly.map(proj);
-   if(pts.length>2 && pts[0][0]===pts[pts.length-1][0] && pts[0][1]===pts[pts.length-1][1]) pts.pop();  // drop duplicate closing point for the closed curve
-   wg.append('path').attr('d',areaCurve(pts)+'Z').attr('fill',wc.fill)
-    .attr('stroke',wc.line).attr('stroke-width',sw).attr('stroke-linejoin','round'); }
+  /* v0.46.0 — each area is a polygon WITH its islands (rings after the first are
+     holes → fill-rule evenodd), and each ring is split into runs: real shoreline
+     (type 0: smoothed + stroked) and tile-clip edge (type 1: straight, fill only),
+     so big lakes/sea show no seam lines where map tiles meet. All fills are drawn
+     first, then one shoreline stroke on top (a neighbouring tile's fill can't
+     cover it). */
+  const lin=d3.line().x(d=>d[0]).y(d=>d[1]);
+  const shore=[];
+  const ringPath=runs=>{
+   if(runs.length===1){ const pts=runs[0][1].map(proj);
+    if(pts.length>2 && pts[0][0]===pts[pts.length-1][0] && pts[0][1]===pts[pts.length-1][1]) pts.pop();
+    if(pts.length<3) return '';
+    if(runs[0][0]===0){ const d=areaCurve(pts)+'Z'; shore.push(d); return d; }
+    return lin(pts)+'Z'; }
+   let d='';
+   for(const run of runs){ const pts=run[1].map(proj); if(pts.length<2) continue;
+    const seg=(run[0]?lin:riverCurve)(pts); if(!run[0]) shore.push(seg);
+    d+= d ? 'L'+seg.slice(1) : seg; }
+   return d ? d+'Z' : ''; };
+  for(const poly of featData.areas){ const d=poly.map(ringPath).join(''); if(!d) continue;
+   wg.append('path').attr('d',d).attr('fill',wc.fill).attr('fill-rule','evenodd').attr('stroke','none'); }
+  if(shore.length) wg.append('path').attr('d',shore.join('')).attr('fill','none')
+   .attr('stroke',wc.line).attr('stroke-width',sw).attr('stroke-linejoin','round').attr('stroke-linecap','round');
   const lw=1.7/(MAP.w/DISPW)/Z;
   for(const ln of featData.lines){ if(ln.length<2) continue;
    wg.append('path').attr('d',riverCurve(ln.map(proj))).attr('fill','none').attr('stroke',wc.line).attr('stroke-width',lw)
@@ -3238,7 +3256,7 @@ window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMo
    we project it with the same frame math as the terrain and draw it inside
    the map viewport, so it pans/zooms with everything else. Off by default.
    ========================================================================== */
-const featCache=new Map(); let featData=null, featReq=0, featTimer=null;
+const featCache=new Map(), featRetried=new Set(); let featData=null, featReq=0, featTimer=null;
 /* Water is keyed to the GRID (overscan extent), not the display centre — so
    panning within the loaded grid keeps the overlay without a refetch. */
 function gridKey(){ return TER ? (Math.round(TER.left)+','+Math.round(TER.top)+','+TER.zoom) : ''; }
@@ -3259,10 +3277,13 @@ async function updateFeatures(){
   if(seq!==featReq) return;                          // a newer frame superseded this
   if(!res.ok) throw new Error('features '+res.status);
   const data=await res.json();
-  const rec={ polys:data.polys||[], lines:data.lines||[] };
-  featCache.set(key,rec);
+  const rec={ areas:data.areas||[], lines:data.lines||[] };
+  /* Only remember complete results — a partial/failed answer is retried once
+     shortly after, instead of sticking for the whole session. */
+  if(!data.partial && !data.error) featCache.set(key,rec);
+  else if(!featRetried.has(key)){ featRetried.add(key); setTimeout(()=>{ if(state.showWater) updateFeatures(); },3500); }
   featData={...rec, gridKey:gridKey()};
-  if(note) note.textContent = data.error ? 'Water data unavailable right now.' : ((rec.polys.length+rec.lines.length) ? '' : 'No water features in view.');
+  if(note) note.textContent = data.error ? 'Water data unavailable right now.' : ((rec.areas.length+rec.lines.length) ? '' : 'No water features in view.');
   render();
  }catch(e){ if(seq===featReq){ featData=null; if(note) note.textContent='Water data unavailable — the map is still fine.'; render(); } }
 }

@@ -4,9 +4,14 @@
  * routes/features.js
  *
  * GET /api/features?bbox=<south,west,north,east>&layers=water
- *   → { bbox:[s,w,n,e], polys:[ [[lon,lat],…], … ], lines:[ [[lon,lat],…], … ] }
- *     polys = filled areas (lakes, oceans, bays, reservoirs)
- *     lines = strokes      (rivers, streams, canals)
+ *   → { bbox:[s,w,n,e], areas:[ polygon, … ], lines:[ [[lon,lat],…], … ], partial? }
+ *     areas = filled water (lakes, oceans, bays). v0.46.0 shape:
+ *               polygon = [ ring, … ]      first ring = outline, the rest = islands (holes)
+ *               ring    = [ run, … ]       consecutive runs share an endpoint
+ *               run     = [ type, [[lon,lat],…] ]   type 0 = real shoreline,
+ *                                                   type 1 = tile-clip edge (fill only, never stroked)
+ *     lines = strokes (rivers, streams, canals)
+ *     partial = true when a tile failed/timed out — the client must not cache it
  *
  * ── v0.40.0 DATA SOURCE = MapTiler vector tiles, ZERO npm dependencies ─────
  * Overpass is unreachable from Render (confirmed live). Water now comes from
@@ -17,13 +22,11 @@
  * fetch. Layers used: `water` (polygons → polys), `waterway` (lines → lines).
  * The client + `{bbox,polys,lines}` contract are unchanged.
  *
- * Kept: disk cache, a hard time budget (never 502), soft-fail to an empty
- * overlay, and a /diag endpoint that decodes a Seattle sample tile.
+ * Kept: a hard time budget (never 502), soft-fail to an empty overlay,
+ * an in-memory decoded-tile LRU (the old unbounded disk cache was removed in v0.46.0), and a /diag endpoint that decodes a Seattle sample tile.
  */
 
 const express = require('express');
-const fs      = require('fs');
-const path    = require('path');
 const dns     = require('node:dns');
 const net     = require('node:net');
 
@@ -40,14 +43,6 @@ const ATTEMPT_MS = 4500;
 const BUDGET_MS  = 10000;
 const MAX_TILES  = 12;
 const MT_MAXZOOM = 14;
-
-const CACHE_DIR  = path.join(__dirname, '..', 'cache');
-const CACHE_FILE = path.join(CACHE_DIR, 'features-cache.json');
-let cache = {};
-try { if (fs.existsSync(CACHE_FILE)) cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch {}
-function saveCache() {
-  try { fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
-}
 
 const r6 = n => Math.round(n * 1e6) / 1e6;
 function decimate(coords, max) {
@@ -121,6 +116,27 @@ function decodeGeometry(b, start, end) {
   return out;
 }
 
+function ringArea(r) { let a = 0; for (let i = 0; i < r.length - 1; i++) a += r[i][0] * r[i + 1][1] - r[i + 1][0] * r[i][1]; return a / 2; }
+// Split a closed ring (tile coords) into runs of real shoreline (0) vs tile-clip
+// edge (1). A segment is clip edge when both ends sit on/outside the tile bounds:
+// that part of the outline is where the tile cut the water, not a shore, so the
+// client fills it but never strokes or smooths it (no seam lines on big lakes/sea).
+function splitRuns(ring, extent, conv) {
+  const n = ring.length - 1;                       // segments (ring[n] === ring[0])
+  const out = p => p[0] <= 0 || p[0] >= extent || p[1] <= 0 || p[1] >= extent;
+  const segEdge = i => out(ring[i]) && out(ring[i + 1]);
+  let start = -1;
+  for (let i = 0; i < n; i++) if (segEdge(i) !== segEdge((i + n - 1) % n)) { start = i; break; }
+  if (start < 0) return [[segEdge(0) ? 1 : 0, decimate(ring.map(conv), 600)]];
+  const runs = []; let cur = null;
+  for (let k = 0; k < n; k++) {
+    const i = (start + k) % n, t = segEdge(i) ? 1 : 0;
+    if (!cur || cur[0] !== t) { cur = [t, [ring[i]]]; runs.push(cur); }
+    cur[1].push(ring[i + 1]);
+  }
+  return runs.map(([t, pts]) => [t, decimate(pts.map(conv), Math.max(2, Math.round(600 * pts.length / n)))]);
+}
+
 // Decode one tile buffer, appending `water`/`waterway` geometry to polys/lines.
 function decodeTile(buf, tx, ty, z, polys, lines) {
   const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
@@ -159,7 +175,19 @@ function decodeFeature(b, start, end, extent, tx, ty, z, polys, lines) {
   if (gStart < 0) return;
   const parts = decodeGeometry(b, gStart, gEnd);
   const conv = pt => tileToLonLat(tx + pt[0] / extent, ty + pt[1] / extent, z);
-  if (gtype === 3) { for (const ring of parts) if (ring.length >= 4) polys.push(decimate(ring.map(conv), 600)); }
+  if (gtype === 3) {
+    // MVT polygons: an exterior ring followed by its interior rings (islands),
+    // told apart by winding. Take the first ring's winding as "exterior".
+    let extSign = 0, cur = null;
+    for (const ring of parts) {
+      if (ring.length < 4) continue;
+      const a = ringArea(ring); if (!a) continue;
+      if (!extSign) extSign = a > 0 ? 1 : -1;
+      const runs = splitRuns(ring, extent, conv);
+      if ((a > 0 ? 1 : -1) === extSign || !cur) { cur = [runs]; polys.push(cur); }
+      else cur.push(runs);
+    }
+  }
   else if (gtype === 2) { for (const ln of parts) if (ln.length >= 2) lines.push(decimate(ln.map(conv), 600)); }
 }
 
@@ -178,7 +206,7 @@ async function fetchArrayBuffer(url, timeout) {
 // In-memory decoded-tile cache (LRU). Panning a frame usually shifts by one tile,
 // so most tiles are already decoded → a big speedup + fewer MapTiler calls.
 const tileCache = new Map();          // 'z/x/y' -> { polys, lines }
-const TILE_CACHE_MAX = 600;
+const TILE_CACHE_MAX = 300;
 function tileCacheGet(k) { const v = tileCache.get(k); if (v) { tileCache.delete(k); tileCache.set(k, v); } return v; }
 function tileCacheSet(k, v) { tileCache.set(k, v); if (tileCache.size > TILE_CACHE_MAX) tileCache.delete(tileCache.keys().next().value); }
 
@@ -190,12 +218,13 @@ async function fetchWater(s, w, n, e) {
   const polys = [], lines = [];
   const deadline = Date.now() + BUDGET_MS;
   const jobs = [];
+  let complete = true;
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
     const k = z + '/' + x + '/' + y;
     const hit = tileCacheGet(k);
     if (hit) { for (const p of hit.polys) polys.push(p); for (const l of hit.lines) lines.push(l); continue; }
     const remaining = deadline - Date.now();
-    if (remaining <= 300) break;
+    if (remaining <= 300) { complete = false; continue; }
     const tx = x, ty = y;
     jobs.push(
       fetchArrayBuffer(tileUrl(z, tx, ty), Math.min(ATTEMPT_MS, remaining))
@@ -205,17 +234,17 @@ async function fetchWater(s, w, n, e) {
           tileCacheSet(z + '/' + tx + '/' + ty, { polys: tp, lines: tl });   // cache empty tiles too (no water there → don't refetch); network failures throw and are NOT cached
           for (const p of tp) polys.push(p); for (const l of tl) lines.push(l);
         })
-        .catch(err => { console.warn(`[features] maptiler tile ${z}/${tx}/${ty} failed: ${err.message}`); })
+        .catch(err => { complete = false; console.warn(`[features] maptiler tile ${z}/${tx}/${ty} failed: ${err.message}`); })
     );
   }
   await Promise.all(jobs);
-  return { polys, lines, z };
+  return { polys, lines, z, complete };
 }
 
 router.get('/', async (req, res) => {
   const bbox = String(req.query.bbox || '').split(',').map(Number);
   if (bbox.length !== 4 || bbox.some(v => !isFinite(v))) {
-    return res.status(400).json({ error: 'bbox=south,west,north,east required', polys: [], lines: [] });
+    return res.status(400).json({ error: 'bbox=south,west,north,east required', areas: [], lines: [] });
   }
   let [s, w, n, e] = bbox;
   if (s > n) [s, n] = [n, s];
@@ -224,21 +253,19 @@ router.get('/', async (req, res) => {
   // frame (with overscan) can span several degrees — the old 1.6° cap made water
   // vanish when zoomed out. pickZoom + MAX_TILES keep the tile fan-out bounded.
   if ((n - s) > 12 || (e - w) > 12) {
-    return res.json({ bbox: [s, w, n, e], polys: [], lines: [], note: 'area too large for feature overlay' });
+    return res.json({ bbox: [s, w, n, e], areas: [], lines: [], note: 'area too large for feature overlay' });
   }
   const layers = new Set(String(req.query.layers || 'water').split(',').map(x => x.trim()).filter(Boolean));
-  const key = [s, w, n, e].map(v => v.toFixed(3)).join(',') + '|' + [...layers].sort().join(',');
-  if (cache[key]) return res.json(cache[key]);
-  if (!layers.has('water')) return res.json({ bbox: [s, w, n, e], polys: [], lines: [] });
+  if (!layers.has('water')) return res.json({ bbox: [s, w, n, e], areas: [], lines: [] });
 
   try {
-    const { polys, lines } = await fetchWater(s, w, n, e);
-    const out = { bbox: [s, w, n, e], polys, lines };
-    cache[key] = out; saveCache();
+    const { polys, lines, complete } = await fetchWater(s, w, n, e);
+    const out = { bbox: [s, w, n, e], areas: polys, lines };
+    if (!complete) out.partial = true;       // some tiles missing → client retries, nothing is cached
     res.json(out);
   } catch (err) {
     console.error('[features] water fetch failed:', err.message);
-    res.json({ bbox: [s, w, n, e], polys: [], lines: [], error: 'water source unavailable' });
+    res.json({ bbox: [s, w, n, e], areas: [], lines: [], error: 'water source unavailable' });
   }
 });
 
@@ -277,3 +304,4 @@ module.exports.decodeTile = decodeTile;
 module.exports.pickZoom   = pickZoom;
 module.exports.lon2tileX  = lon2tileX;
 module.exports.lat2tileY  = lat2tileY;
+module.exports.fetchWater = fetchWater;
