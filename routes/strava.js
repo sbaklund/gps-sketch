@@ -19,6 +19,7 @@
  */
 
 const express = require('express');
+const crypto  = require('crypto');
 const router = express.Router();
 
 // ---------------------------------------------------------------------------
@@ -168,18 +169,28 @@ router.get('/auth/login', (req, res) => {
     return res.redirect(FRONTEND_URL + '?strava=connected');
   }
   if (!CLIENT_ID) return res.status(500).send('STRAVA_CLIENT_ID not configured on the server');
+  // CSRF guard: a random value we hand to Strava and expect back on the callback.
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.oauthState = state;
   const url = 'https://www.strava.com/oauth/authorize'
     + `?client_id=${CLIENT_ID}`
     + `&redirect_uri=${encodeURIComponent(BASE_URL + '/auth/callback')}`
     + '&response_type=code'
     + '&approval_prompt=auto'
-    + '&scope=read,activity:read_all';
+    + '&scope=read,activity:read_all'
+    + `&state=${state}`;
   res.redirect(url);
 });
 
 router.get('/auth/callback', async (req, res) => {
   try {
     if (req.query.error) return res.redirect(FRONTEND_URL + '?strava_error=' + encodeURIComponent(req.query.error));
+    const expected = req.session && req.session.oauthState;
+    if (req.session) delete req.session.oauthState;
+    if (!expected || req.query.state !== expected) {
+      console.warn('[strava] callback state mismatch — sign-in not started from this browser');
+      return res.redirect(FRONTEND_URL + '?strava_error=' + encodeURIComponent('Sign-in expired — please try again'));
+    }
     const data = await exchangeCode(req.query.code);
     setTokens(req, data);
     console.log('[strava] user connected:', (data.athlete && data.athlete.firstname) || 'unknown');
@@ -253,6 +264,7 @@ router.get('/api/activities', async (req, res) => {
 
 router.get('/api/streams/:id', async (req, res) => {
   try {
+    if (!/^\d{1,20}$/.test(req.params.id)) return res.status(400).json({ error: 'Invalid activity id' });
     let tokens = getTokens(req);
     if (!tokens) return res.status(401).json({ error: 'Not connected', code: 'NOT_CONNECTED' });
     if (MOCK) {
@@ -285,4 +297,4 @@ async function init() {
   else console.log('[strava] per-user session mode — each visitor signs in independently');
 }
 
-module.exports = { router, init };
+module.exports = { router, init, toCard };

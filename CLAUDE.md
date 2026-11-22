@@ -2,20 +2,22 @@
 
 This file is loaded automatically at the start of every Claude Code session. It is
 the single source of context for how this project works and how I want you to work.
-(Reference docs live in `docs/`: HANDOFF = technical reference, RESUME = what's next,
-ROADMAP = backlog, plus the latest CHECKPOINT.)
+(Live docs in `docs/`: EXECUTION-PLAN = checklist, NEXT-SESSION-PASTE = where we are,
+ROADMAP-backlog = older feature backlog, latest CHECKPOINT. Everything else is in `docs/archive/`.)
 
 ## Who + what
 GPX Sketch (gpxsketch.io) turns Strava/GPX routes and searched places into
 topographic + abstract art posters. I'm Stephen (GitHub: sbaklund) — a non-developer
 with strong design instincts (benchmarks: Apple, Strava, Illustrator). You've written
-~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.47.0**.
+~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.48.0**.
 
 ## First thing each session
-Read `docs/NEXT-SESSION-PASTE.md` (the one-page "where we are"), then
-`docs/EXECUTION-PLAN.md` (the live checklist), `docs/claude_RESUME.md`, and the latest
-`docs/claude_CHECKPOINT-*.md`. When I say "go," do the next unchecked item in the
+Read `docs/NEXT-SESSION-PASTE.md` (the one-page "where we are"), then `docs/EXECUTION-PLAN.md`
+(the live checklist). Open the latest `docs/claude_CHECKPOINT-*.md` only if you need detail; older
+docs are in `docs/archive/` and are out of date. When I say "go," do the next unchecked item in the
 plan without re-asking. Make recommendations so I can answer just "yes" or "no".
+Before each task set, say which model it needs (Fable = code, Sonnet = research/mockups/copy,
+Haiku = mechanical) and ask me to switch if we're on the wrong one.
 
 ## How we work together
 - **Mockups before risky UI.** For any visual/layout change to the big merged HTML,
@@ -43,11 +45,15 @@ plan without re-asking. Make recommendations so I can answer just "yes" or "no".
   ask the SERVER (`/api/status`), not a local flag.
 - GPX files are read with the browser's DOMParser in both apps (no library).
 
-## Version bumps (5 spots, always equal)
-Every code change bumps the version in all five: `public/index.html` top comment;
-`window.__BUILD__.html`; `server.js` top comment; `const BUILD` in server.js;
-`VERSION.txt`. Grep-verify all five match. The `?debug` badge (bottom-right) shows
-`html vX · srv vX ✓`; `⚠` means something is stale.
+## Version bumps (ONE spot since v0.48.0)
+Every code change bumps `VERSION.txt` — nothing else. The server reads it at boot, reports it at
+`/health`, and stamps it into the page (`__V__` in `public/index.html`) and the `?v=` file URLs.
+The `?debug` badge (bottom-right) shows `html vX · srv vX ✓`; `⚠` means the browser has a stale page.
+
+## Checks before every push
+Run `npm test` (zero-dependency `node --test`; files in `test/`). It starts the real server and checks
+the page, file URLs, Strava sign-in guard, activity ids and the water decoder. Add a test with each fix.
+To try Strava without keys: `STRAVA_MOCK=1 npm start`, then open `/auth/login`.
 
 ## Dependencies — do NOT add npm packages
 Deps are: cors, dotenv, express, express-session. A deploy that needs
@@ -63,7 +69,7 @@ public/  index.html · og-preview.png · css/app.css · js/topo.js · js/abstrac
 routes/  strava.js · geocode.js · features.js
 cache/.gitkeep
 ```
-Deploy flow: make the edit → bump the 5 version spots → get the change into GitHub
+Deploy flow: make the edit → bump `VERSION.txt` → `npm test` → get the change into GitHub
 (commit + push if git is wired up here; otherwise I upload the changed file via the
 GitHub web UI) → Render auto-deploys → open the site with `?debug` and confirm the
 badge shows the new version BEFORE testing behavior.

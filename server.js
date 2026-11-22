@@ -1,6 +1,6 @@
 // ======================================================================
-//  GPX Sketch  —  SERVER BUILD  v0.47.0
-//  Keep in sync with window.__BUILD__.html (frontend) and VERSION.txt.
+//  GPX Sketch  —  server. The version lives in ONE place: VERSION.txt.
+//  The server reads it at boot and stamps it into the page it serves.
 // ======================================================================
 'use strict';
 
@@ -15,9 +15,12 @@ catch (e) { console.warn('[boot] could not set dns order:', e.message); }
 console.log('[boot] server.js loading…');
 console.log('[boot] Node version:', process.version);
 
-// BUILD version — must match window.__BUILD__.html in the frontend.
-// Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.47.0';
+// BUILD version — read from VERSION.txt (the single source). /health reports it
+// and sendPage() stamps it into index.html, so the ?debug badge shows a stale
+// (browser-cached) page as a mismatch.
+let BUILD = 'unknown';
+try { BUILD = require('fs').readFileSync(require('path').join(__dirname, 'VERSION.txt'), 'utf8').trim() || 'unknown'; }
+catch (e) { console.warn('[boot] VERSION.txt not readable:', e.message); }
 console.log('[boot] build', BUILD);
 
 /**

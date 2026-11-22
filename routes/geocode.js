@@ -37,8 +37,19 @@ const CACHE_FILE = path.join(CACHE_DIR, 'geocode-cache.json');
 // ---- tiny disk cache (keyed by rounded coords) --------------------------
 let cache = {};
 try { if (fs.existsSync(CACHE_FILE)) cache = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); } catch {}
+// Bounded (oldest entries dropped) and written in the background at most every
+// few seconds, so a busy server never blocks on a growing JSON file.
+const CACHE_MAX = 3000;
+let saveTimer = null;
 function saveCache() {
-  try { fs.mkdirSync(CACHE_DIR, { recursive: true }); fs.writeFileSync(CACHE_FILE, JSON.stringify(cache)); } catch {}
+  const keys = Object.keys(cache);
+  for (let i = 0; i < keys.length - CACHE_MAX; i++) delete cache[keys[i]];
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    fs.mkdir(CACHE_DIR, { recursive: true }, () => fs.writeFile(CACHE_FILE, JSON.stringify(cache), () => {}));
+  }, 3000);
+  if (saveTimer.unref) saveTimer.unref();
 }
 const keyOf = (lat, lon) => `${lat.toFixed(3)},${lon.toFixed(3)}`;
 

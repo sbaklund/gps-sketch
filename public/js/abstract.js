@@ -326,7 +326,7 @@
         // ---------- Debug / error surfacing ----------
         // Nothing is allowed to fail silently. Every pipeline step logs
         // here; any JS error pops the panel open automatically.
-        const BUILD = 'v6.7';
+        const BUILD = (window.__BUILD__ && window.__BUILD__.html) || 'dev';
         const debugPanel = document.getElementById('debugPanel');
         const debugLog = document.getElementById('debugLog');
         document.getElementById('debugCloseButton').addEventListener('click', () => debugPanel.classList.remove('open'));
@@ -2756,6 +2756,7 @@
             const mark = stravaConnectButton.querySelector('.strava-mark');
             if (mark) mark.style.display = '';
             stravaConnectLabel.textContent = 'Connect with Strava';
+            if (window._setTopoStravaUI) window._setTopoStravaUI(false);   // keep Topo's button in sync
             dbg(`Strava session lost during ${context} — the server is no longer signed in`, true);
             stravaOverlay.classList.add('open');
             stravaConnectNote.style.display = 'none';
