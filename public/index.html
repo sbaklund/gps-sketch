@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<!-- ==================================================================== -->
+<!--  GPX Sketch  —  FRONTEND BUILD  v0.47.0                              -->
+<!--  Keep in sync with server.js BUILD and VERSION.txt on every export.  -->
+<!-- ==================================================================== -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPX Sketch — GPS Art Generator</title>
+<meta name="description" content="Turn your Strava routes and GPX files into abstract art — or a topographic map poster of the real terrain.">
+<meta property="og:type"        content="website">
+<meta property="og:site_name"   content="GPX Sketch">
+<meta property="og:url"         content="https://gpxsketch.io/">
+<meta property="og:title"       content="GPX Sketch — every route is a work of art">
+<meta property="og:description" content="Turn your Strava routes and GPX files into topographic map posters and abstract art of the real terrain you moved through.">
+<meta property="og:image"       content="https://gpxsketch.io/og-preview.png?v=2">
+<meta property="og:image:type"  content="image/png">
+<meta property="og:image:width"  content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt"   content="GPX Sketch — blueprint topographic map with a glowing route line and the tagline every route is a work of art">
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="GPX Sketch — every route is a work of art">
+<meta name="twitter:description" content="Turn your Strava routes and GPX files into topographic map posters and abstract art of the real terrain you moved through.">
+<meta name="twitter:image"       content="https://gpxsketch.io/og-preview.png?v=2">
+<link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAEuUlEQVR4nLWXzW+UVRTGf+fed2ba8lH6ASUFCZFQbQSFhQFdEFuDKCokit8BKgtdQIgGNhijQOICLCZKEIx/ALERY6KAboiwQUsJUYMYowsotLS02pbOvJ2Z997j4m1LWz7bTJ9kFpN75z7Pec45d84VBqGqVkQcINeuXatLpRKPqvoy5yIAYUIwaq1BxPTmctHZ/fv3n9i1a1c0gusGOUBbW+vqTOZ6s4uyWmh4n9MwTJ9r62h9cSSnDKnp7Gx7d+bM2Z+A4F2oIF5VJxb4GIgIqmpsUCwA3d0dH1ZWzt6tqlYArly58lR19ewf8ZFzPkLE2IIwj4GqOmusYpJBZ2f7uqqq6iOmpaUlMXVq0V4w6tzkkQOIiHXeCXgtKSna09LSUiKt7a111TNnnQCvTLjYxg1vbNJ0dFx9wRQnUo8Zm1TATw6XwphaUlUFo8lk4nFjDDOIi7Hw3N6DGLABeDd2VUBmmFjiJEAVEiWxiFwIiSm3olIzKeTeIUER/uxRBjYtJHxjLtHRA2CLQEdnOig4uSrYBBr2km3ciF2+FjO3hvznW7GLVyDzHoL8wPD2yXHAWDSXgXwWu6Qeu/x5NOfR/v9iyhH1VngHRCDKIqXVmAVLyTVuAK8E9eswDywDNwDmRtyFd8DlISjBnz2Gv3QBnMeu2kRqR1Mc+ZhuG58DQ60kg7pVGa7socNT06Cvk9zBrdDbhVQvILnxI9Q7YLAtx50C1bhrE1Pir/hBYnvT1em7LpFrXI92XEQ9JDfsRkqr0Fx/fB+Mwd0FqIcgCQrR6W9wZ46j7f+AemR6BebBZTCtHPJ5tPMi7qfD6L9taDYi8dp2ghWvo/n0LcnvLkA92BT0dpHd14A78wNExJe2xL+W5u/BOYhc7KwDSRoSr24n+ebHaBSOKrp7FqDe4zFouo/8zjXo+WakbAZmTg1SvRBJFqEi+D9/Rnu7wDvM9ErM/Y8QrGzALl0VkwN3+o+7jQDFWos1KfjibeRCM9lUQPDMWyRefg8pKR0sPQfZDJrugSiPTK9AiuI1zWfuGPltBagqIpb+cIBP9+7k0uEmNs9LsOi59WjDHvC5OKcQV3QihZRXx1FqdGPtHseKWwowNmDL5i2cOHmKObWreOn305x6dhuz1OOjHDKyoDTO/zDGOc+M8khVCRJJMukevjt6nC8PHeD0sW9pz0Sc+eNvRAz+pnxKfPsNfcaJUQ6ICFGUo2RKKU/WP8HWd7Yxf/5nVJROZ8nDi1GNMPeQ1/HAMKZEBQH1HDp4gLVrnqOiopwjX3/F3Pvmx/ZPIMo7QALv6QN06Nh4hI4oLy9j757G4Z0uCpHCRq9AX5DNhs3q84LIiNMFF0V4nxsWVUjrRUTASzYb/WJ+TWdPpvv7LxhbhKq6EZviu8DagpJ7772xSdLp65d6enqOm9U1Ndl0GO4AxBqr3vtJmo5B1fvAWgfGpNOZ92tra68PP826uq5+UFFRtQvAu9CrFnxYFRsUG4Du7s59lZVV24feh8MPxfbOy6+EYfq8qiv441TVaxhm/urq6mgY5DQwogWHnGhqaipeubL+6SAIlnnvy5xzE+47Y0TFGgym1zl35tzl347XLarrV1UjIh7gf5+I6NQJKaTZAAAAAElFTkSuQmCC">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- D3 now inlined near the vendor scripts below — see end of body -->
+<link rel="stylesheet" href="/css/app.css?v=__V__">
+<script>
+  /* ---- Launch hygiene: debug gate ----
+     Verbose console.log/info/debug are silenced for the public site so the
+     browser console stays clean. They're kept on localhost, and on any URL
+     with ?debug — which ALSO reveals the build-version badge. warn/error are
+     never silenced, so real problems still surface. Runs before every other
+     script so nothing logs before the gate is in place. */
+  (function(){
+    try{
+      var DEBUG = /[?&]debug\b/i.test(location.search)
+               || /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+      window.__DEBUG__ = DEBUG;
+      if(!DEBUG){ var noop=function(){}; console.log=noop; console.info=noop; console.debug=noop; }
+    }catch(e){}
+  })();
+</script>
+</head>
+<body data-app="topo">
+  <!-- Build version stamp — proves which deploy is live. Updated every export. -->
+  <div id="buildStamp" style="position:fixed; right:8px; bottom:6px; z-index:9999;
+       font:10px/1.4 ui-monospace,'IBM Plex Mono',monospace; color:rgba(128,128,128,.7);
+       background:rgba(0,0,0,.35); padding:3px 8px; border-radius:6px; pointer-events:none;
+       backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); user-select:text;"></div>
+  <script>
+    // BUILD is bumped on every code export. Compare against server /health.
+    window.__BUILD__ = { html: 'v0.47.0', date: '2026-11-22' };
+    (function(){
+      const el = document.getElementById('buildStamp');
+      if(!el) return;
+      // Launch hygiene: the version badge is a dev/deploy tool, not for end users.
+      // Hidden on the public site; shown on localhost or with ?debug (set by the gate above).
+      if(!window.__DEBUG__){ el.style.display='none'; return; }
+      el.textContent = 'html ' + window.__BUILD__.html;
+      // Also fetch the backend build so we can confirm both match.
+      const base = (window.location.hostname==='localhost'||window.location.hostname==='127.0.0.1') ? 'http://localhost:3001' : '';
+      fetch(base + '/health', { cache:'no-store' })
+        .then(r=>r.json())
+        .then(h=>{
+          const server = h.build || '?';
+          const match = server === window.__BUILD__.html;
+          el.textContent = 'html ' + window.__BUILD__.html + ' · srv ' + server + (match ? ' ✓' : ' ⚠');
+          if(!match) el.style.color = 'rgba(236,90,42,.95)';
+        })
+        .catch(()=>{ el.textContent = 'html ' + window.__BUILD__.html + ' · srv offline'; });
+    })();
+  </script>
+  <nav id="tabbar" role="tablist" aria-label="App switcher">
+    <button class="apptab" id="tabTopo" role="tab" aria-selected="true">
+      <svg viewBox="0 0 40 26" aria-hidden="true"><path d="M2 20 C10 6, 18 22, 26 12 S36 5, 38 8" fill="none" stroke="#ec5a2a" stroke-width="3.4" stroke-linecap="round"/><path d="M2 24 C12 12, 20 26, 30 17" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".55"/></svg>
+      Topo
+    </button>
+    <button class="apptab" id="tabAbstract" role="tab" aria-selected="false">
+      <svg viewBox="0 0 40 26" aria-hidden="true"><circle cx="12" cy="13" r="7" fill="none" stroke="#ec5a2a" stroke-width="3"/><path d="M22 20 L30 6 L36 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity=".65"/></svg>
+      Abstract
+    </button>
+    <div class="brand-center">
+      <div class="wordmark">
+        <span class="wordmark-text">GPX Sketch</span>
+        <svg class="route-underline" viewBox="0 0 150 12" aria-hidden="true">
+          <path d="M4 8 C 24 2, 40 12, 62 6 S 100 1, 122 7 S 140 5, 146 6"/>
+          <circle class="start" cx="4" cy="8" r="2.3"/>
+          <circle class="end" cx="146" cy="6" r="2.3"/>
+        </svg>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ===================== VIEW PORT ===================== -->
+  <div id="view-port">
+
+  <!-- ===================== TOPO ===================== -->
+  <div id="shell">
+  <aside class="rail" id="rail">
+
+    <div class="group" id="routeGroup">
+      <div class="label">Route</div>
+      <button class="btn" id="stravaBtn" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="opacity:.7"><path d="M10.5 1L6.5 9.5h2.8L10.5 7l1.2 2.5h2.8L10.5 1zM5.5 9.5L3 4.5 0.5 9.5h2.1l.4-.8.4.8h2.1z"/></svg>
+        <span id="stravaBtnLabel">Connect to Strava</span>
+      </button>
+      <img id="stravaBtnAvatar" style="display:none; width:22px; height:22px; border-radius:50%; margin-right:4px;">
+      <div class="field" style="margin-top:8px;">
+        <label for="gpxInput" class="btn" style="display:block; text-align:center; font-size:11px;">⬆ Upload GPX file</label>
+        <input type="file" id="gpxInput" accept=".gpx,.xml" style="display:none;">
+        <div id="gpxName" class="note"></div>
+      </div>
+      <div class="field" style="margin-top:10px; position:relative;">
+        <label for="placeSearch">Or make a map of any place</label>
+        <input type="text" id="placeSearch" autocomplete="off" spellcheck="false" placeholder="City, park, peak — or 40.01, -105.27">
+        <div id="placeResults"></div>
+        <div id="placeNote" class="note"></div>
+      </div>
+      <div id="envNote"></div>
+      <div id="loadMsg" class="note"></div>
+      <button class="btn" id="resetDefault" style="width:100%; margin-top:8px; font-size:11px;">↺ Reset to default map</button>
+      <label class="toggle" style="display:none;"><input type="checkbox" id="showRoute" checked><span>Show route line</span></label>
+      <button class="btn" id="stravaBtn2" style="display:none;"></button>
+      <button class="btn" id="retryElev" style="display:none;">Retry elevation</button>
+      <button class="btn" id="testSrc" style="display:none;">Test source</button>
+    </div>
+
+    <div class="group">
+      <div class="label">Themes</div>
+      <div id="signaturePane" class="presets"></div>
+      <div class="morewrap">
+        <button class="btn" id="moreBtn"><span id="moreBtnLabel">More themes</span><span id="moreCount" style="color:var(--accent);font-weight:600;"></span></button>
+        <div id="moreDrop">
+
+          <div id="moreList"></div>
+        </div>
+      </div>
+      <button class="btn" id="diceTheme" title="Surprise me — random theme" style="width:100%; margin-top:var(--gap); display:flex; align-items:center; justify-content:center; gap:7px;"><span aria-hidden="true">&#127922;</span> Surprise me</button>
+    </div>
+
+    <div class="group">
+      <div class="label">Type</div>
+      <div id="typePane" class="presets"></div>
+    </div>
+
+    <div class="group">
+      <div class="label" id="colorsLabel">Colors</div>
+      <div class="seg" id="posterMode" role="group" aria-label="poster background">
+        <button data-pm="light" aria-pressed="true">Light</button>
+        <button data-pm="dark" aria-pressed="false">Dark</button>
+      </div>
+      <p class="note" id="customNote" style="display:none; margin:0;">Custom colors active — pick a theme to return to Light/Dark presets.</p>
+      <div class="swatchRow" id="swatchRow" style="margin-top:10px;"></div>
+      <div id="pickerWrap">
+        <div id="pkTitle">Background</div>
+        <div id="pkSV"><span class="pkKnob" id="pkSVKnob"></span></div>
+        <div id="pkHue"><span class="pkKnob" id="pkHueKnob"></span></div>
+        <div class="pkFoot">
+          <input type="text" id="pkHex" spellcheck="false">
+          <button class="btn" id="pkReset" style="flex:0 0 auto;">Reset</button>
+        </div>
+      </div>
+      <p class="note" id="colorsNote"></p>
+    </div>
+
+    <div class="group">
+      <div class="label">Map Style</div>
+      <div class="seg" id="mode" role="group" aria-label="map style">
+        <button data-mode="line" aria-pressed="false">Lines</button>
+        <button data-mode="fill" aria-pressed="false">Bands</button>
+        <button data-mode="both" aria-pressed="false">Both</button>
+      </div>
+      <div class="row" style="margin-top:14px;"><label for="interval">Contour interval</label><span class="val" id="intervalVal">200 ft</span></div>
+      <input type="range" id="interval" min="20" max="500" step="10" value="120">
+      <div class="row" style="margin-top:14px;"><label for="weight">Line weight</label><span class="val" id="weightVal">1.0</span></div>
+      <input type="range" id="weight" min="0.3" max="2.5" step="0.1" value="1.0">
+      <div class="row" style="margin-top:14px;"><label for="routeWidth">Route width</label><span class="val" id="routeWidthVal">3.4</span></div>
+      <input type="range" id="routeWidth" min="1" max="9" step="0.2" value="3.4">
+      <div class="seg" id="routePresets" role="group" aria-label="route width presets" style="margin-top:8px;">
+        <button type="button" data-rw="2">Fine</button>
+        <button type="button" data-rw="3.4">Medium</button>
+        <button type="button" data-rw="6">Bold</button>
+      </div>
+      <div class="row" style="margin-top:14px;"><label for="routeZoom">Map zoom</label><span class="val" id="routeZoomVal">35%</span></div>
+      <input type="range" id="routeZoom" min="0" max="1" step="0.02" value="0.35">
+    </div>
+
+    <div class="group">
+      <div class="label">Map features</div>
+      <label class="toggle"><input type="checkbox" id="showWater"><span>Water — lakes &amp; rivers</span></label>
+      <div id="featNote" class="note"></div>
+    </div>
+
+    <div class="group">
+      <div class="label">Legend</div>
+      <div class="field"><label for="title">Title</label><input type="text" id="title" value=""></div>
+      <div class="field"><label for="subtitle">Subtitle</label><input type="text" id="subtitle" value=""></div>
+      <p class="note">Auto-filled from Strava. Edit anytime.</p>
+      <label class="toggle" style="margin-top:6px;"><input type="checkbox" id="showStats" checked><span>Show stats line</span></label>
+      <label class="toggle"><input type="checkbox" id="showCoords" checked><span>Show coordinates</span></label>
+    </div>
+
+    <div class="group">
+      <div class="label">Export</div>
+      <div class="field" style="margin-bottom:10px;">
+        <label for="exportSize">PNG size</label>
+        <select id="exportSize">
+          <option value="screen">Screen · 2250 × 3000 px</option>
+          <option value="9x12">Print 9 × 12 in · 300 dpi</option>
+          <option value="12x16">Print 12 × 16 in · 300 dpi</option>
+          <option value="18x24">Print 18 × 24 in · 300 dpi</option>
+        </select>
+      </div>
+      <div class="btns"><button class="btn primary" id="dlSvg">SVG</button><button class="btn" id="dlPng">PNG</button></div>
+      <p class="note">SVG is true vector — scales to any size. PNG renders at the selected print size &amp; 300 dpi (3:4, matches the poster).</p>
+    </div>
+  </aside>
+
+  <main id="stage">
+    <div id="topoBanner"><span class="bdot" aria-hidden="true"></span><span><button type="button" class="blink" id="bannerStrava">Connect to Strava</button> or <button type="button" class="blink" id="bannerUpload">Upload GPX</button> to generate a new map.</span></div>
+    <div id="poster-shell">
+      <svg id="poster" viewBox="0 0 900 1200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Topographic artwork preview"></svg>
+      <div id="busy">
+        <svg id="busySvg" viewBox="0 0 120 56" aria-hidden="true">
+          <path id="busyPath" d="M4 40 C16 12, 26 48, 38 22 S58 44, 70 16 88 42, 100 20 110 34, 116 24"
+            fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div id="busyTitle">Creating Map</div>
+        <div id="busySub">This may take a minute</div>
+      </div>
+      <div id="placeHint" role="status" aria-live="polite">
+        <span class="seg">
+          <svg class="hand" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path class="harrow" d="M3 12 H7 M3 12 l2 -2 M3 12 l2 2"/>
+            <path class="harrow" d="M21 12 H17 M21 12 l-2 -2 M21 12 l-2 2"/>
+            <path d="M9 11V7.5a1.3 1.3 0 0 1 2.6 0V11m0 -1.2a1.3 1.3 0 0 1 2.6 0V11m0 -.6a1.3 1.3 0 0 1 2.6 0v3.4a4.2 4.2 0 0 1 -4.2 4.2h-1.1a4 4 0 0 1 -2.9 -1.25l-2.3 -2.5a1.3 1.3 0 0 1 1.9 -1.75L9 12"/>
+          </svg>
+          <span class="txt">Drag to pan</span>
+        </span>
+        <span class="dot"></span>
+        <span class="seg">
+          <svg width="16" height="22" viewBox="0 0 16 22" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2.4" y="2.4" width="11.2" height="17.2" rx="5.6"/>
+            <line class="wheel" x1="8" y1="6.4" x2="8" y2="9.6"/>
+          </svg>
+          <span class="txt">Scroll to zoom</span>
+        </span>
+      </div>
+    </div>
+  </main>
+  </div>
+
+  <!-- ===================== ABSTRACT (real app, merged) ===================== -->
+  <div id="abstractShell">
+    <div id="main-container">
+        <div id="controls-bar">
+            <div class="file-input-group">
+                <label for="fileInput" id="fileInputLabel">Upload GPX</label>
+                <input type="file" id="fileInput" accept=".gpx" multiple>
+            </div>
+            <button id="stravaConnectButton" title="Connect your Strava account">
+                <span class="strava-mark" aria-hidden="true">
+                    <!-- placeholder mark; replace with official Connect with Strava asset -->
+                    <svg width="13" height="14" viewBox="0 0 13 14"><path d="M5.5 0 L0.5 8.5 H3.8 L5.5 5.6 L7.2 8.5 H10.5 Z" fill="#fff"/><path d="M8.2 8.5 L9.9 11.6 L11.6 8.5 H13 L9.9 14 L6.8 8.5 Z" fill="#FFD2BC"/></svg>
+                </span>
+                <span id="stravaConnectLabel">Connect with Strava</span>
+            </button>
+            <div class="toolbar-divider"></div>
+            <div class="control-group palette-group">
+                <label>Palette</label>
+                <button id="paletteButton" title="Choose a color palette">
+                    <span id="currentPaletteName">Palette</span>
+                    <span id="currentPaletteStrip" class="mini-strip"></span>
+                </button>
+                <button id="dicePaletteButton" title="Surprise me — random palette">&#127922;</button>
+                <div id="paletteDropdown">
+                    <button id="surpriseButton">&#127922; Surprise Me</button>
+                    <div class="palette-section-title">Favorites</div>
+                    <div id="favoritesList"></div>
+                    <div class="palette-section-title">Featured</div>
+                    <div id="featuredList"></div>
+                    <span id="libCount" hidden></span>
+                    <div id="libraryList" hidden></div>
+                </div>
+            </div>
+            <div class="control-group" title="Turn fill and/or outline on for all routes. Colors are auto-picked from your palette (fill and outline never match); fine-tune them in the color dock below.">
+                <label>Style</label>
+                <button id="toggleFillBtn" class="fo-toggle" aria-pressed="true" title="Fill — applies to the selected route (or all if none selected)"><span class="fo-dot fo-fill" aria-hidden="true"></span>Fill</button>
+                <button id="toggleOutlineBtn" class="fo-toggle" aria-pressed="false" title="Outline — applies to the selected route (or all if none selected)"><span class="fo-dot" aria-hidden="true"></span>Outline</button>
+            </div>
+            <div class="control-group" title="Background auto-matches your palette when art is generated. Pick a color to override, or reset to auto.">
+                <label for="bgColorInput">Background</label>
+                <input type="color" id="bgColorInput" value="#ffffff">
+                <button id="bgResetButton" title="Return to auto background">&#8634; auto</button>
+            </div>
+            <div class="control-group">
+                <label for="ratioSelect">Canvas</label>
+                <select id="ratioSelect" title="Canvas aspect ratio">
+                    <option value="16:9">16 : 9</option>
+                    <option value="3:2">3 : 2&nbsp; (4&times;6)</option>
+                    <option value="4:5">4 : 5</option>
+                    <option value="1:1">1 : 1</option>
+                </select>
+                <button id="orientationButton" title="Flip orientation (landscape / portrait)">&#8646;</button>
+            </div>
+            <div class="toolbar-divider"></div>
+            <button id="reshuffleButton" disabled title="Load routes to start">&#8635; Reshuffle</button>
+            <div class="save-group">
+                <button id="saveDropdownButton">Export As&hellip;</button>
+                <div id="saveOptions" class="dropdown-content">
+                    <button id="saveJpgButton">.JPG</button>
+                    <button id="savePngButton">.PNG</button>
+                    <button id="saveSvgButton">.SVG (Vector)</button>
+                </div>
+            </div>
+        </div>
+        <div id="content-area">
+            <div id="left-panel">
+                <div class="panel-section" id="routesPanel">
+                    <div class="panel-head">
+                        <h3>Routes</h3>
+                        <span class="count-pill" id="routeCount">0</span>
+                        <span class="spacer"></span>
+                        <button class="linkish" id="clearFilesButton" title="Remove all loaded routes">clear all</button>
+                    </div>
+                    <div id="routeSearchWrap">
+                        <input id="routeSearch" type="search" placeholder="Filter routes&hellip;" autocomplete="off">
+                    </div>
+                    <div id="routeList"></div>
+                </div>
+                <div class="panel-section" id="statsCard">
+                    <div class="panel-head"><h3 id="statsHeading">Activity</h3></div>
+                    <div class="stats-body">
+                        <div class="stats-title" id="statsTitle"></div>
+                        <div class="stats-sub" id="statsSub"></div>
+                        <div class="stats-grid" id="statsGrid"></div>
+                    </div>
+                </div>
+                <div class="panel-section" id="editPanel">
+                    <h3>Edit Route</h3>
+                    <div class="panel-hint" id="editHint">Click any shape on the canvas to edit it.</div>
+                    <div class="tool-group">
+                        <label for="scaleSlider">Scale</label>
+                        <input type="range" id="scaleSlider" min="0.5" max="4" value="1" step="0.01" disabled>
+                        <span id="scaleValue" class="value-display">100%</span>
+                    </div>
+                    <div class="tool-group">
+                        <label for="rotationSlider">Rotation</label>
+                        <input type="range" id="rotationSlider" min="0" max="360" value="0" step="1" disabled>
+                        <span id="rotationValue" class="value-display">0&deg;</span>
+                    </div>
+                    <div class="tool-group">
+                        <label>Reflect</label>
+                        <div class="reflect-row">
+                            <button id="reflectHButton" class="reflect-btn" title="Reflect across the vertical axis" disabled>
+                                <svg viewBox="0 0 20 16" aria-hidden="true">
+                                    <path d="M8.4 2.6 L2.2 8 L8.4 13.4 Z" class="solid"/>
+                                    <path d="M11.6 2.6 L17.8 8 L11.6 13.4 Z" class="hollow"/>
+                                    <path d="M10 1 V15" class="axis"/>
+                                </svg>
+                            </button>
+                            <button id="reflectVButton" class="reflect-btn" title="Reflect across the horizontal axis" disabled>
+                                <svg viewBox="0 0 16 20" aria-hidden="true">
+                                    <path d="M2.6 8.4 L8 2.2 L13.4 8.4 Z" class="solid"/>
+                                    <path d="M2.6 11.6 L8 17.8 L13.4 11.6 Z" class="hollow"/>
+                                    <path d="M1 10 H15" class="axis"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="tool-group">
+                        <label for="strokeWeightSlider">Stroke Weight</label>
+                        <input type="range" id="strokeWeightSlider" min="0.5" max="12" value="2" step="0.5" disabled>
+                        <span id="strokeWeightValue" class="value-display">2.0 px</span>
+                    </div>
+                    <div class="tool-group">
+                        <label for="opacitySlider">Opacity</label>
+                        <input type="range" id="opacitySlider" min="0" max="100" value="100" step="1" disabled>
+                        <span id="opacityValue" class="value-display">100%</span>
+                    </div>
+                    <button id="doneEditingButton">Deselect</button>
+                </div>
+            </div>
+            <div id="canvas-wrapper">
+                <div id="canvas-prompt">Upload GPX or connect Strava &middot; click route to edit</div>
+                <div id="canvas-container">
+                    <canvas id="gpsArtCanvas"></canvas> 
+                </div>
+            </div>
+        </div>
+        <div id="colorDockWrap">
+            <div id="colorDockBar">
+                <span id="dockModeLabel">Palette</span>
+                <span id="dockWatermark" aria-hidden="true">created by stephen baklund · all rights reserved</span>
+                <span class="cd-hint">hover over color &nbsp;&rarr;&nbsp; drag &#8646; to shade &nbsp;&rarr;&nbsp; click for colors</span>
+            </div>
+            <div id="colorDock"></div>
+        </div>
+    </div>
+
+    <div id="messageModal">
+        <div id="messageModalContent">
+            <p id="modalMessageText"></p>
+            <button id="modalCloseButton">Close</button>
+        </div>
+    </div>
+
+    <div id="debugPanel">
+        <div class="dbg-title"><span>debug log &middot; toggle: Ctrl/Cmd+D</span><button class="dbg-close" id="debugCloseButton">&times;</button></div>
+        <div id="debugLog"></div>
+
+        <!-- Abstract undo/redo floating bar (mirrors Topo's #histBar) -->
+        <div id="absHistBar" role="group" aria-label="Undo and redo"
+             style="position:fixed; right:22px; bottom:22px; z-index:60; display:none; gap:2px; padding:6px 8px;
+                    background:rgba(0,0,0,.72); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+                    border-radius:12px; border:1px solid rgba(255,255,255,.12);">
+          <button id="absUndoBtn" disabled title="Undo" style="width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:transparent;border:none;border-radius:8px;color:#fff;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h8a3 3 0 010 6H8"/><path d="M5 5L3 8l2 3"/></svg>
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;line-height:1;">Undo</span>
+          </button>
+          <div style="width:1px;background:rgba(255,255,255,.25);margin:6px 2px;"></div>
+          <button id="absRedoBtn" disabled title="Redo" style="width:44px;height:44px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;background:transparent;border:none;border-radius:8px;color:#fff;">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 8H5a3 3 0 000 6h3"/><path d="M11 5l2 3-2 3"/></svg>
+            <span style="font-family:var(--font-mono);font-size:9px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;line-height:1;">Redo</span>
+          </button>
+        </div>
+        <script>
+          document.getElementById('absUndoBtn').onclick=()=>{ if(window._absUndo) window._absUndo(); };
+          document.getElementById('absRedoBtn').onclick=()=>{ if(window._absRedo) window._absRedo(); };
+          // Show/hide based on active tab
+          const _absBar=document.getElementById('absHistBar');
+          new MutationObserver(()=>{
+            const isAbs=document.body.dataset.app==='abstract';
+            if(_absBar && _absBar.classList.contains('on')) _absBar.style.display=isAbs?'flex':'none';
+          }).observe(document.body, {attributes:true, attributeFilter:['data-app']});
+        </script>
+    </div>
+
+    <!-- ================= STRAVA CONNECT (real OAuth) ================= -->
+    <div id="stravaOverlay">
+        <div class="strava-window" id="stravaWindow">
+            <div class="oauth-chrome">
+                <span class="oauth-title">Strava</span>
+                <button class="win-close" id="stravaCloseButton" title="Close">&times;</button>
+            </div>
+
+            <!-- VIEW: CONNECT (real OAuth launcher) -->
+            <div class="strava-view active" id="stravaViewConnect">
+                <div class="strava-body">
+                    <div class="strava-brand">STRAVA</div>
+                    <h2>Connect your Strava</h2>
+                    <p class="strava-sub">Sign in on Strava to bring your activities into <strong>GPX Sketch</strong>.</p>
+                    <ul class="auth-scopes">
+                        <li><span class="tick">&#10003;</span> You sign in on Strava&rsquo;s own site &mdash; GPX Sketch never sees your password</li>
+                        <li><span class="tick">&#10003;</span> Read-only access to your activities and their routes</li>
+                        <li><span class="tick">&#10003;</span> Disconnect any time</li>
+                    </ul>
+                    <button class="strava-btn" id="stravaConnectStartButton">Connect with Strava</button>
+                    <div class="strava-connect-note" id="stravaConnectNote">
+                        Connecting requires the GPX&nbsp;Sketch server to be running, so sign-in works on the hosted app rather than a local file.
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: LOADING -->
+            <div class="strava-view" id="stravaViewLoading">
+                <div class="strava-loading">
+                    <div class="spinner"></div>
+                    <div>Fetching your activities&hellip;</div>
+                </div>
+            </div>
+
+            <!-- VIEW 4: DASHBOARD -->
+            <div class="strava-view" id="stravaViewDash">
+                <div class="dash-header">
+                    <img class="dash-avatar" id="dashAvatarImg" src="" alt="">
+                    <div class="dash-id">
+                        <div class="dash-name">Strava athlete</div>
+                        <div class="dash-loc"></div>
+                    </div>
+                    <button class="disconnect" id="stravaDisconnectButton">Disconnect</button>
+                </div>
+                <div class="dash-filter-note" id="dashFilterNote"></div>
+                <div class="dash-list" id="dashList"></div>
+                <div class="dash-footer" id="dashFooter">
+                    <span class="dash-count" id="dashCount">0 selected</span>
+                    <button class="dash-selectall" id="dashSelectAll">Select all</button>
+                    <button class="strava-btn" id="stravaImportButton" disabled>Add to canvas</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+  </div>
+
+  </div><!-- /#view-port -->
+
+  <!-- ---------- undo / redo ---------- -->
+  <div id="histBar" role="group" aria-label="Undo and redo">
+    <button id="undoBtn" title="Undo (Ctrl/Cmd+Z)" aria-label="Undo">
+      <span>Undo</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+    </button>
+    <div class="sep"></div>
+    <button id="redoBtn" title="Redo (Ctrl/Cmd+Shift+Z)" aria-label="Redo">
+      <span>Redo</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg>
+    </button>
+  </div>
+
+
+<!-- ==== ABSTRACT APP — vendor libraries (inlined, no CDN dependency) ==== -->
+<script src="/vendor/d3.min.js?v=d3-7"></script>
+<script src="/vendor/fabric.min.js?v=fabric-5.3.0"></script>
+<script src="/js/topo.js?v=__V__"></script>
+<!-- ==== ABSTRACT APP — application logic, isolated in its own IIFE ==== -->
+<script src="/js/abstract.js?v=__V__"></script>
+<script>
+/* 1b fix: #stravaOverlay is authored inside #abstractShell, which carries a
+   clip-path for the tab wipe transition. clip-path clips ALL descendants —
+   even position:fixed ones — and establishes a containing block that traps
+   them, so the overlay was getting cut off by the header. Moving it to be a
+   direct child of <body> at startup takes it out from under that clip
+   entirely, with no change to Abstract's own code. */
+(function(){
+  function liftOverlay(){
+    var ov = document.getElementById('stravaOverlay');
+    if (ov && ov.parentNode !== document.body) document.body.appendChild(ov);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', liftOverlay);
+  } else {
+    liftOverlay();
+  }
+})();
+</script>
+<div id="siteWatermark" aria-hidden="true">created by stephen baklund · all rights reserved</div>
+<script>
+/* Position the watermark centred UNDER THE ARTBOARD of whichever app is active,
+   so the left rail (Topo) / left panel (Abstract) doesn't make it look
+   off-centre — and lift it clear of Abstract's full-width Palette dock. Runs on
+   load, resize, and whenever the active app or transition state changes. Falls
+   back to viewport-centre if the artboard can't be measured (e.g. narrow/mobile
+   stacked layout). */
+(function(){
+  function place(){
+    // Topo only — Abstract shows the watermark inside the Palette bar (#dockWatermark).
+    var wm=document.getElementById('siteWatermark'); if(!wm) return;
+    if(document.body.getAttribute('data-app')!=='topo') return;
+    var art=document.getElementById('poster-shell');
+    var r = art && art.getBoundingClientRect();
+    if(!r || r.width < 60){ wm.style.left='50%'; wm.style.bottom='9px'; return; }  // fallback: page-centre
+    wm.style.left = Math.round(r.left + r.width/2) + 'px';   // centred under the poster (transform:translateX(-50%))
+    wm.style.bottom='9px';                                    // workspace margin below the poster
+  }
+  var raf; function placeSoon(){ cancelAnimationFrame(raf); raf=requestAnimationFrame(place); }
+  window.addEventListener('resize', placeSoon);
+  window.addEventListener('load', place);
+  if(document.readyState!=='loading') place(); else document.addEventListener('DOMContentLoaded', place);
+  try{ new MutationObserver(placeSoon).observe(document.body,{attributes:true,attributeFilter:['data-app','data-transitioning']}); }catch(e){}
+  setTimeout(place,300); setTimeout(place,1200);   // catch late layout (fonts, first render)
+  window.__placeWatermark = place;   // headless-test hook
+})();
+</script>
+</body>
+</html>

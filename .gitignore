@@ -17,3 +17,7 @@ Thumbs.db
 
 # Local-only project notes (not deployed)
 docs/
+
+# Local tooling
+.claude/
+package-lock.json

@@ -9,7 +9,7 @@ ROADMAP = backlog, plus the latest CHECKPOINT.)
 GPX Sketch (gpxsketch.io) turns Strava/GPX routes and searched places into
 topographic + abstract art posters. I'm Stephen (GitHub: sbaklund) — a non-developer
 with strong design instincts (benchmarks: Apple, Strava, Illustrator). You've written
-~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.45.0**.
+~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.47.0**.
 
 ## First thing each session
 Read `docs/NEXT-SESSION-PASTE.md` (the one-page "where we are"), then
@@ -29,18 +29,22 @@ plan without re-asking. Make recommendations so I can answer just "yes" or "no".
 - **Keep me in plain English.** I'm not a developer — explain what you changed and why
   in normal language, not jargon.
 
-## Editing the big file (topo-art-v5-merged.html, ~7.1k lines)
-- D3 and Fabric.js are inlined. **Never trust remembered line numbers** — grep for a
-  unique nearby string, view that range, then edit.
-- Filter greps with `| grep -v 'fabric'` to skip vendor matches; the Abstract IIFE
-  starts at the `ABSTRACT APP` banner comment (grep for it) — Topo code is above it.
-- **Topo and Abstract are two separate IIFEs.** `stravaConnected`, `currentApp`,
+## Frontend files (split in v0.47.0 — no build step)
+- `public/index.html` (~570 lines) — markup + two tiny inline scripts. The server fills in
+  `__V__` with the build version so `/css/app.css?v=…`, `/js/topo.js?v=…`, `/js/abstract.js?v=…`
+  are re-downloaded on every deploy and cached otherwise.
+- `public/css/app.css` — all styles. `public/js/topo.js` — Topo app. `public/js/abstract.js` — Abstract app.
+- `public/vendor/d3.min.js`, `public/vendor/fabric.min.js` — libraries. **Never read or grep these**
+  (one giant line each). Grep only `public/js` and `public/css`.
+- **Never trust remembered line numbers** — grep for a unique nearby string, view that range, then edit.
+- **Topo and Abstract are two separate IIFEs** (now two files). `stravaConnected`, `currentApp`,
   `BACKEND_URL` etc. exist independently in each scope. Cross-scope state goes through
   `window.*` globals or `body.dataset` — never a shared `let`. For connection state,
   ask the SERVER (`/api/status`), not a local flag.
+- GPX files are read with the browser's DOMParser in both apps (no library).
 
 ## Version bumps (5 spots, always equal)
-Every code change bumps the version in all five: HTML top comment;
+Every code change bumps the version in all five: `public/index.html` top comment;
 `window.__BUILD__.html`; `server.js` top comment; `const BUILD` in server.js;
 `VERSION.txt`. Grep-verify all five match. The `?debug` badge (bottom-right) shows
 `html vX · srv vX ✓`; `⚠` means something is stale.
@@ -55,7 +59,7 @@ in-file MVT decoder rather than a library.
 Repo layout / deploy paths:
 ```
 server.js · package.json · render.yaml · VERSION.txt
-public/  topo-art-v5-merged.html · og-preview.png
+public/  index.html · og-preview.png · css/app.css · js/topo.js · js/abstract.js · vendor/
 routes/  strava.js · geocode.js · features.js
 cache/.gitkeep
 ```

@@ -1,5 +1,5 @@
 // ======================================================================
-//  GPX Sketch  —  SERVER BUILD  v0.46.1
+//  GPX Sketch  —  SERVER BUILD  v0.47.0
 //  Keep in sync with window.__BUILD__.html (frontend) and VERSION.txt.
 // ======================================================================
 'use strict';
@@ -17,7 +17,7 @@ console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.46.1';
+const BUILD = 'v0.47.0';
 console.log('[boot] build', BUILD);
 
 /**
@@ -26,7 +26,7 @@ console.log('[boot] build', BUILD);
  * Serves BOTH the frontend (static HTML) AND the API from one process.
  * One domain, no CORS headaches, no FRONTEND_URL to keep in sync.
  *
- * Static files:  /  → public/topo-art-v5-merged.html (+ any other assets in public/)
+ * Static files:  /  → public/index.html, which loads css/app.css, js/topo.js, js/abstract.js, vendor/*
  * API:           /health, /api/features, /api/geocode, /auth/*, /api/status, /api/activities, /api/streams/*
  */
 
@@ -150,21 +150,32 @@ app.use('/health', (req, res, next) => { res.set('Cache-Control', 'no-store'); n
 // Static files — serve the frontend from /public
 // ---------------------------------------------------------------------------
 
+// The page (public/index.html) loads its CSS/JS as separate files. Their URLs
+// carry ?v=<BUILD> (the __V__ placeholder is filled in here), so a deploy always
+// fetches fresh code while browsers cache each version for a long time.
+const PAGE_FILE = path.join(__dirname, 'public', 'index.html');
+let pageCache = null;
+function sendPage(req, res) {
+  try {
+    if (!pageCache || !process.env.RENDER) pageCache = fs.readFileSync(PAGE_FILE, 'utf8').replace(/__V__/g, BUILD);
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');   // never cache HTML
+    res.type('html').send(pageCache);
+  } catch (e) {
+    console.error('[server] cannot read index.html:', e.message);
+    res.status(500).send('GPX Sketch is temporarily unavailable.');
+  }
+}
+app.get(['/', '/index.html', '/topo-art-v5-merged.html'], sendPage);
+
 app.use(express.static(path.join(__dirname, 'public'), {
-  maxAge: '1h',                 // cache static assets for 1 hour
-  index: 'topo-art-v5-merged.html',
+  index: false,
+  maxAge: '1h',
   setHeaders(res, filePath) {
-    // Never cache HTML — ensures deploys take effect immediately
-    if (filePath.endsWith('.html')) {
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
+    // Versioned code/vendor files (?v=…) never change under the same URL.
+    // (Local dev: no caching, so edits show up on reload.)
+    if (/[\\/](js|css|vendor)[\\/]/.test(filePath)) res.set('Cache-Control', process.env.RENDER ? 'public, max-age=2592000, immutable' : 'no-cache');
   },
 }));
-
-// Also serve the root index explicitly (in case someone hits / )
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'topo-art-v5-merged.html'));
-});
 
 // ---------------------------------------------------------------------------
 // Health check
@@ -203,9 +214,8 @@ app.use('/api', (req, res) => {
 });
 
 // For any other unmatched route, serve the SPA (the frontend handles its own routing)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'topo-art-v5-merged.html'));
-});
+// …but a missing file (anything with an extension) is a real 404, not the page.
+app.get('*', (req, res) => /\.[a-z0-9]+$/i.test(req.path) ? res.status(404).send('Not found') : sendPage(req, res));
 
 // Global error handler
 app.use((err, req, res, _next) => {
