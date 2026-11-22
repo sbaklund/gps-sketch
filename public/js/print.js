@@ -15,7 +15,14 @@
   let cat = null, prod = 'paper', size = '18x24', trim = null, lastFocus = null;
 
   // The Print button stays hidden until the server says printing is switched on (or ?print=1 for previewing).
-  const preview = /[?&]print=1\b/.test(location.search);
+  // ?print=1 switches the preview on for THIS browser and it stays on (so it survives the trip to Stripe and back,
+  // and plain gpxsketch.io); ?print=0 switches it off again.
+  let preview = false;
+  try {
+    const q = new URLSearchParams(location.search).get('print');
+    if (q === '1') localStorage.setItem('gpxPrintPreview', '1'); else if (q === '0') localStorage.removeItem('gpxPrintPreview');
+    preview = q === '1' || (q !== '0' && localStorage.getItem('gpxPrintPreview') === '1');
+  } catch (e) { preview = /[?&]print=1\b/.test(location.search); }
   fetch('/api/print/products').then(r => r.ok ? r.json() : null).then(d => {
     if (!d || !Array.isArray(d.products)) return;
     cat = d;
