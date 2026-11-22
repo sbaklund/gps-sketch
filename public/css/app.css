@@ -1473,3 +1473,77 @@
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ============================================================
+   PHONE LAYOUT (860px and below) — see public/js/mobile.js
+   Art fills the screen; a bottom bar opens one tool panel at a
+   time as a slide-up sheet. Nothing here applies on desktop.
+   ============================================================ */
+#mobBar, .sheet-grab{ display:none; }
+@media (max-width: 860px){
+  body{ height:100dvh; min-height:0; }
+  .mob-hide{ display:none !important; }
+
+  /* top bar: name on the left, app switch on the right */
+  #tabbar{ align-items:center; padding:8px 12px; gap:6px; }
+  .brand-center{ position:static; transform:none; order:-1; margin-right:auto; align-items:flex-start; }
+  .brand-center .wordmark{ align-items:flex-start; }
+  .brand-center .wordmark-text{ font-size:17px; }
+  .brand-center .route-underline{ width:96px; height:8px; margin-top:2px; }
+  .apptab{ top:0; padding:8px 14px; border-radius:var(--r-pill); font-size:12px; background:rgba(128,128,128,.14); }
+  .apptab svg{ display:none; }
+  .apptab[aria-selected="true"]{ background:var(--accent); color:#fff; }
+
+  /* bottom bar */
+  #mobBar{ display:flex; flex:0 0 auto; gap:2px; z-index:70; background:var(--tabbar); border-top:1px solid var(--tabbar-line);
+    padding:6px 6px calc(6px + env(safe-area-inset-bottom, 0px)); }
+  #mobBar button{ flex:1 1 0; min-width:0; min-height:50px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+    padding:5px 2px; margin:0; border:0; border-radius:12px; background:none; box-shadow:none; cursor:pointer;
+    font-family:var(--body); font-size:10.5px; font-weight:500; letter-spacing:0; text-transform:none; color:var(--text-dim);
+    -webkit-tap-highlight-color:transparent; }
+  #mobBar button svg{ width:22px; height:22px; }
+  #mobBar button[aria-pressed="true"]{ color:var(--accent); }
+  #mobBar button.cta{ background:var(--accent); color:#fff; font-weight:700; }
+  #mobBar button.cta[aria-pressed="true"]{ background:var(--accent-dim); color:#fff; }
+  body[data-app="topo"] #mobBar .abs, body[data-app="abstract"] #mobBar .topo{ display:none; }
+
+  /* the sheet (Topo sidebar / Abstract left panel) */
+  #shell, #abstractShell{ flex-direction:column; }
+  .rail, #left-panel{ order:1; width:100%; flex:0 0 auto; height:auto; max-height:0; padding:0 12px; border:0; overflow:hidden;
+    background:var(--rail); scrollbar-gutter:auto; transition:max-height .26s ease; }
+  body[data-sheet] .rail, body[data-sheet] #left-panel{ max-height:48%; padding:0 12px 18px; overflow-y:auto; overscroll-behavior:contain;
+    border-top:1px solid var(--rail-line); border-radius:16px 16px 0 0; box-shadow:0 -8px 24px rgba(0,0,0,.16); }
+  .sheet-grab{ display:block; position:sticky; top:0; z-index:8; flex:0 0 24px; width:calc(100% + 24px); height:24px; margin:0 -12px -6px;
+    padding:0; border:0; border-radius:0; background:var(--rail); box-shadow:none; cursor:pointer; }
+  .sheet-grab::after{ content:""; display:block; width:40px; height:4px; margin:0 auto; border-radius:4px; background:var(--text-dim); opacity:.55; }
+
+  /* 16px text boxes stop iPhones zooming the page when you tap into one */
+  .rail input[type="text"], .rail select, #left-panel input[type="search"], #left-panel input[type="text"], #left-panel select{ font-size:16px; }
+
+  /* Topo: poster fills whatever space is left above the sheet */
+  #stage{ order:0; flex:1 1 0; min-height:0; padding:12px 12px 24px; overflow:hidden; container-type:size; }
+  #poster-shell{ width:min(100cqw, calc(100cqh * .75)); }
+  #poster{ touch-action:none; }
+  #topoBanner{ top:8px; max-width:calc(100% - 24px); }
+  body:not([data-sheet]) #stage{ padding-top:62px; }
+  body[data-sheet] #topoBanner{ display:none; }
+  #stage::after{ content:"created by stephen baklund · all rights reserved"; position:absolute; left:0; right:0; bottom:6px; text-align:center;
+    font-family:var(--mono); font-size:8.5px; letter-spacing:.10em; color:rgba(58,64,70,.40); pointer-events:none; }
+  #siteWatermark{ display:none; }
+  #histBar, #absHistBar{ top:62px !important; right:8px !important; bottom:auto !important; padding:3px 4px !important; }
+  #histBar button, #absHistBar button{ width:38px; height:38px; }
+  #buildStamp{ bottom:74px !important; }
+
+  /* Abstract: canvas on top, toolbar + panels + colour dock inside the sheet */
+  #content-area{ flex-direction:column; }
+  #canvas-wrapper{ order:0; flex:1 1 0; padding:8px; }
+  #controls-bar{ margin:0; padding:0; border:0; border-radius:0; box-shadow:none; background:none; justify-content:flex-start; flex-shrink:0; }
+  #controls-bar .toolbar-divider{ display:none; }
+  #colorDockWrap{ border:1px solid var(--line); border-radius:var(--abs-r-lg); overflow:hidden; }
+  #colorDockBar .cd-hint, #dockWatermark{ display:none; }
+  /* Save tab: show the three file types as plain buttons (no dropdown) */
+  .save-group{ width:100%; }
+  #saveDropdownButton{ display:none; }
+  #saveOptions{ display:flex; position:static; gap:8px; min-width:0; padding:0; border:0; box-shadow:none; background:none; }
+  #saveOptions button{ flex:1; text-align:center; padding:12px 8px; border:1px solid var(--line-strong); border-radius:var(--abs-r-pill); background:var(--surface); }
+}

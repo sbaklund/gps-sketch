@@ -1237,6 +1237,22 @@ function setPlaceZoomT(t,{live=false}={}){
  };
  posterEl.addEventListener('pointerup', endPan);
  posterEl.addEventListener('pointercancel', endPan);
+ // Pinch to zoom (touch screens) — two fingers on the map scale it live, like the wheel.
+ const fingers=new Map(); let pinch0=null;
+ const spread=()=>{ const [a,b]=[...fingers.values()]; return Math.hypot(a.x-b.x,a.y-b.y); };
+ posterEl.addEventListener('pointerdown', e=>{
+  if(e.pointerType!=='touch'||!placeMode||!TER) return;
+  fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(fingers.size===2){ endPan(e); pinch0={ d:spread(), t:state.routeZoom }; }   // second finger: stop panning, start zooming
+ });
+ posterEl.addEventListener('pointermove', e=>{
+  if(!fingers.has(e.pointerId)) return;
+  fingers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(fingers.size===2&&pinch0&&pinch0.d>0) setPlaceZoomT(pinch0.t+Math.log2(spread()/pinch0.d)/(PLACE_ZMAX-PLACE_ZMIN),{live:true});
+ });
+ const endPinch=e=>{ fingers.delete(e.pointerId); if(fingers.size<2) pinch0=null; };
+ posterEl.addEventListener('pointerup', endPinch);
+ posterEl.addEventListener('pointercancel', endPinch);
 }
 /* Small read-only hook for debugging/support (and headless tests): current frame. */
 window.__topoFrame=()=> TER ? { lat:TER.lat, lon:TER.lon, zoom:TER.zoom, placeMode,

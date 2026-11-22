@@ -34,6 +34,16 @@ test('the page is stamped with the version and every file it loads exists', asyn
   for (const u of urls) assert.equal((await fetch(base + u)).status, 200, u);
 });
 
+test('phone layout: bottom bar, its script, and a tab for every Topo panel', async () => {
+  const html = await (await fetch(base + '/')).text();
+  assert.ok(html.includes('id="mobBar"'));
+  assert.ok(html.includes('/js/mobile.js?v=' + VERSION));
+  const tabs = new Set([...html.matchAll(/class="group" data-tab="(\w+)"/g)].map(m => m[1]));
+  const untagged = [...html.matchAll(/class="group"(?! data-tab)/g)].length;
+  assert.equal(untagged, 0, 'every sidebar group needs a data-tab or it never shows on phones');
+  for (const t of tabs) assert.ok(html.includes(`class="topo" data-sheet="${t}"`) || html.includes(`class="topo cta" data-sheet="${t}"`), t);
+});
+
 test('a missing file is a 404, an unknown page path still serves the app', async () => {
   assert.equal((await fetch(base + '/js/nope.js')).status, 404);
   assert.equal((await fetch(base + '/some/page')).status, 200);

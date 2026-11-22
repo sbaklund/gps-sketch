@@ -102,7 +102,7 @@
   <div id="shell">
   <aside class="rail" id="rail">
 
-    <div class="group" id="routeGroup">
+    <div class="group" data-tab="route" id="routeGroup">
       <div class="label">Route</div>
       <button class="btn" id="stravaBtn" style="width:100%; display:flex; align-items:center; justify-content:center; gap:8px;">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="opacity:.7"><path d="M10.5 1L6.5 9.5h2.8L10.5 7l1.2 2.5h2.8L10.5 1zM5.5 9.5L3 4.5 0.5 9.5h2.1l.4-.8.4.8h2.1z"/></svg>
@@ -129,7 +129,7 @@
       <button class="btn" id="testSrc" style="display:none;">Test source</button>
     </div>
 
-    <div class="group">
+    <div class="group" data-tab="theme">
       <div class="label">Themes</div>
       <div id="signaturePane" class="presets"></div>
       <div class="morewrap">
@@ -142,12 +142,12 @@
       <button class="btn" id="diceTheme" title="Surprise me — random theme" style="width:100%; margin-top:var(--gap); display:flex; align-items:center; justify-content:center; gap:7px;"><span aria-hidden="true">&#127922;</span> Surprise me</button>
     </div>
 
-    <div class="group">
+    <div class="group" data-tab="type">
       <div class="label">Type</div>
       <div id="typePane" class="presets"></div>
     </div>
 
-    <div class="group">
+    <div class="group" data-tab="theme">
       <div class="label" id="colorsLabel">Colors</div>
       <div class="seg" id="posterMode" role="group" aria-label="poster background">
         <button data-pm="light" aria-pressed="true">Light</button>
@@ -167,7 +167,7 @@
       <p class="note" id="colorsNote"></p>
     </div>
 
-    <div class="group">
+    <div class="group" data-tab="map">
       <div class="label">Map Style</div>
       <div class="seg" id="mode" role="group" aria-label="map style">
         <button data-mode="line" aria-pressed="false">Lines</button>
@@ -189,13 +189,13 @@
       <input type="range" id="routeZoom" min="0" max="1" step="0.02" value="0.35">
     </div>
 
-    <div class="group">
+    <div class="group" data-tab="map">
       <div class="label">Map features</div>
       <label class="toggle"><input type="checkbox" id="showWater"><span>Water — lakes &amp; rivers</span></label>
       <div id="featNote" class="note"></div>
     </div>
 
-    <div class="group">
+    <div class="group" data-tab="type">
       <div class="label">Legend</div>
       <div class="field"><label for="title">Title</label><input type="text" id="title" value=""></div>
       <div class="field"><label for="subtitle">Subtitle</label><input type="text" id="subtitle" value=""></div>
@@ -204,7 +204,7 @@
       <label class="toggle"><input type="checkbox" id="showCoords" checked><span>Show coordinates</span></label>
     </div>
 
-    <div class="group">
+    <div class="group" data-tab="save">
       <div class="label">Export</div>
       <div class="field" style="margin-bottom:10px;">
         <label for="exportSize">PNG size</label>
@@ -499,6 +499,19 @@
   </div>
 
   </div><!-- /#view-port -->
+  <!-- ---------- phone layout: bottom bar (shown at 860px and below; see js/mobile.js) ---------- -->
+  <nav id="mobBar" aria-label="Tools">
+    <button type="button" class="topo" data-sheet="route" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6a3.5 3.5 0 0 0 0-7h-4a3.5 3.5 0 0 1 0-7h6"/></svg><span>Route</span></button>
+    <button type="button" class="topo" data-sheet="theme" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></svg><span>Theme</span></button>
+    <button type="button" class="topo" data-sheet="type" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14M12 6v13M9 19h6"/></svg><span>Type</span></button>
+    <button type="button" class="topo" data-sheet="map" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5"/></svg><span>Map</span></button>
+    <button type="button" class="topo cta" data-sheet="save" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></button>
+    <button type="button" class="abs" data-sheet="routes" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6a3.5 3.5 0 0 0 0-7h-4a3.5 3.5 0 0 1 0-7h6"/></svg><span>Routes</span></button>
+    <button type="button" class="abs" data-sheet="style" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 14l5-5 4 4 3-3 4 4"/></svg><span>Style</span></button>
+    <button type="button" class="abs" data-sheet="edit" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg><span>Edit</span></button>
+    <button type="button" class="abs" data-sheet="colors" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="9" r="4.5"/><circle cx="16" cy="9" r="4.5"/><circle cx="12" cy="15.5" r="4.5"/></svg><span>Colors</span></button>
+    <button type="button" class="abs cta" data-sheet="export" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></button>
+  </nav>
 
   <!-- ---------- undo / redo ---------- -->
   <div id="histBar" role="group" aria-label="Undo and redo">
@@ -520,6 +533,7 @@
 <script src="/js/topo.js?v=__V__"></script>
 <!-- ==== ABSTRACT APP — application logic, isolated in its own IIFE ==== -->
 <script src="/js/abstract.js?v=__V__"></script>
+<script src="/js/mobile.js?v=__V__"></script>
 <script>
 /* 1b fix: #stravaOverlay is authored inside #abstractShell, which carries a
    clip-path for the tab wipe transition. clip-path clips ALL descendants —
