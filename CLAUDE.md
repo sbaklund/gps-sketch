@@ -9,7 +9,7 @@ ROADMAP = backlog, plus the latest CHECKPOINT.)
 GPX Sketch (gpxsketch.io) turns Strava/GPX routes and searched places into
 topographic + abstract art posters. I'm Stephen (GitHub: sbaklund) — a non-developer
 with strong design instincts (benchmarks: Apple, Strava, Illustrator). You've written
-~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.44.2**.
+~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.45.0**.
 
 ## First thing each session
 Read `docs/NEXT-SESSION-PASTE.md` (the one-page "where we are"), then
@@ -29,11 +29,11 @@ plan without re-asking. Make recommendations so I can answer just "yes" or "no".
 - **Keep me in plain English.** I'm not a developer — explain what you changed and why
   in normal language, not jargon.
 
-## Editing the big file (topo-art-v5-merged.html, ~21.6k lines)
+## Editing the big file (topo-art-v5-merged.html, ~7.1k lines)
 - D3 and Fabric.js are inlined. **Never trust remembered line numbers** — grep for a
   unique nearby string, view that range, then edit.
-- Filter greps with `| grep -v 'fabric'` to skip vendor matches; use
-  `awk -F: '$1 > 18000'` to isolate the Abstract IIFE from Topo code.
+- Filter greps with `| grep -v 'fabric'` to skip vendor matches; the Abstract IIFE
+  starts at the `ABSTRACT APP` banner comment (grep for it) — Topo code is above it.
 - **Topo and Abstract are two separate IIFEs.** `stravaConnected`, `currentApp`,
   `BACKEND_URL` etc. exist independently in each scope. Cross-scope state goes through
   `window.*` globals or `body.dataset` — never a shared `let`. For connection state,
@@ -46,7 +46,7 @@ Every code change bumps the version in all five: HTML top comment;
 `html vX · srv vX ✓`; `⚠` means something is stale.
 
 ## Dependencies — do NOT add npm packages
-Deps are: cors, dotenv, express, express-session, sharp. A deploy that needs
+Deps are: cors, dotenv, express, express-session. A deploy that needs
 `npm install` to pull a new module can fail on Render and 404 a route (happened in
 v0.39). Ship self-contained, zero-dependency code — e.g. the water feature uses an
 in-file MVT decoder rather than a library.
@@ -56,8 +56,7 @@ Repo layout / deploy paths:
 ```
 server.js · package.json · render.yaml · VERSION.txt
 public/  topo-art-v5-merged.html · og-preview.png
-routes/  strava.js · terrain.js · geocode.js · features.js
-lib/     gridBuilder.js · openmeteo.js · maptiler.js   ← DO NOT overwrite
+routes/  strava.js · geocode.js · features.js
 cache/.gitkeep
 ```
 Deploy flow: make the edit → bump the 5 version spots → get the change into GitHub
@@ -70,10 +69,10 @@ badge shows the new version BEFORE testing behavior.
   `CANONICAL_HOST=gpxsketch.io` (no protocol); seeds the Strava OAuth redirect.
   Production detection keys off the Render/host env, not `NODE_ENV`.
 - `dns.setDefaultResultOrder('ipv4first')` at boot (fixes undici "fetch failed" on IPv6).
-- **`lib/` must not be overwritten** — written in an early session, unchanged. A boot
-  crash "Cannot find module '../lib/...'" means that folder is missing.
-- Strava: Client ID `266449`; per-user sessions in `req.session.stravaTokens`; token
-  persistence via `.strava-tokens.json` + `STRAVA_REFRESH_TOKEN`; dedup on activity ID.
+- Strava: Client ID `266449`; per-user sessions in `req.session.stravaTokens` (in memory, so users
+  re-login after a server restart); dedup on activity ID.
+- v0.45.0 removed the unused server terrain route, `lib/`, `sharp`, and the inlined gpx-parse bundle
+  (GPX is read with the browser's DOMParser in both apps). Terrain is fetched client-side.
 
 ## Testing locally (new superpower vs. the old claude.ai sandbox)
 On my machine you can actually reach external hosts (MapTiler, Terrarium, Nominatim,

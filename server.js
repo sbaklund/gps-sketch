@@ -1,5 +1,5 @@
 // ======================================================================
-//  GPX Sketch  —  SERVER BUILD  v0.44.2
+//  GPX Sketch  —  SERVER BUILD  v0.45.0
 //  Keep in sync with window.__BUILD__.html (frontend) and VERSION.txt.
 // ======================================================================
 'use strict';
@@ -17,7 +17,7 @@ console.log('[boot] Node version:', process.version);
 
 // BUILD version — must match window.__BUILD__.html in the frontend.
 // Bumped on every code export so /health can confirm the deploy is current.
-const BUILD = 'v0.44.2';
+const BUILD = 'v0.45.0';
 console.log('[boot] build', BUILD);
 
 /**
@@ -27,7 +27,7 @@ console.log('[boot] build', BUILD);
  * One domain, no CORS headaches, no FRONTEND_URL to keep in sync.
  *
  * Static files:  /  → public/topo-art-v5-merged.html (+ any other assets in public/)
- * API:           /health, /api/terrain, /auth/*, /api/status, /api/activities, /api/streams/*
+ * API:           /health, /api/features, /api/geocode, /auth/*, /api/status, /api/activities, /api/streams/*
  */
 
 try { require('dotenv').config(); } catch(e) { console.warn('[boot] dotenv not found, skipping:', e.message); }
@@ -61,12 +61,7 @@ try {
 const path    = require('path');
 const fs      = require('fs');
 
-let terrainRouter, strava;
-try {
-  terrainRouter = require('./routes/terrain');
-  console.log('[boot] routes/terrain loaded ✓');
-} catch(e) { console.error('[boot] FATAL: cannot load routes/terrain:', e.message, e.stack); process.exit(1); }
-
+let strava;
 try {
   strava = require('./routes/strava');
   console.log('[boot] routes/strava loaded ✓');
@@ -198,7 +193,6 @@ app.get('/health', (req, res) => {
 // API Routes
 // ---------------------------------------------------------------------------
 
-app.use('/api/terrain', terrainRouter);
 if (geocodeRouter) app.use('/api/geocode', geocodeRouter);
 if (featuresRouter) app.use('/api/features', featuresRouter);
 app.use(strava.router);
@@ -228,7 +222,7 @@ const PORT = parseInt(process.env.PORT ?? '3001', 10);
 app.listen(PORT, async () => {
   console.log(`[server] GPX Sketch listening on port ${PORT}`);
   console.log(`[server] Frontend: http://localhost:${PORT}/`);
-  console.log(`[server] MapTiler key: ${process.env.MAPTILER_KEY ? 'set ✓' : 'not set (openmeteo only)'}`);
+  console.log(`[server] MapTiler key: ${process.env.MAPTILER_KEY ? 'set ✓' : 'NOT SET — water overlay disabled'}`);
   console.log(`[server] Health check: http://localhost:${PORT}/health`);
   await strava.init();
 });
