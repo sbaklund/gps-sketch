@@ -9,17 +9,21 @@ ROADMAP = backlog, plus the latest CHECKPOINT.)
 GPX Sketch (gpxsketch.io) turns Strava/GPX routes and searched places into
 topographic + abstract art posters. I'm Stephen (GitHub: sbaklund) — a non-developer
 with strong design instincts (benchmarks: Apple, Strava, Illustrator). You've written
-~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.44.1**.
+~95% of this code. I'm the product/design lead; you're the engineer. Currently **v0.44.2**.
 
 ## First thing each session
-Read `docs/RESUME.md`, skim `docs/ROADMAP-backlog.md`, and read the latest
-`docs/CHECKPOINT-*.md`. When I say "go," continue the top item without re-asking.
+Read `docs/NEXT-SESSION-PASTE.md` (the one-page "where we are"), then
+`docs/EXECUTION-PLAN.md` (the live checklist), `docs/claude_RESUME.md`, and the latest
+`docs/claude_CHECKPOINT-*.md`. When I say "go," do the next unchecked item in the
+plan without re-asking. Make recommendations so I can answer just "yes" or "no".
 
 ## How we work together
 - **Mockups before risky UI.** For any visual/layout change to the big merged HTML,
   build a standalone mockup + screenshot for my approval before touching the real file.
-- **Checkpoint discipline.** After each meaningful step, write a
-  `docs/CHECKPOINT-vX.Y.Z.md` summarizing what changed, so work resumes on "go."
+- **Checkpoint discipline (every step).** After each meaningful step: (1) tick off
+  the item in `docs/EXECUTION-PLAN.md`, (2) write `docs/claude_CHECKPOINT-vX_Y_Z.md`,
+  (3) regenerate `docs/NEXT-SESSION-PASTE.md` so a brand-new chat can resume by
+  pasting that one file. Do this without being asked.
 - **Ask before you leap.** Prefer to show me a plan or a diff and get a nod before
   large or destructive changes (git resets, mass edits, anything you can't easily undo).
 - **Keep me in plain English.** I'm not a developer — explain what you changed and why

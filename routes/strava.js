@@ -122,7 +122,7 @@ function toCard(a) {
   const pts = decodePolyline(a.map.summary_polyline);
   const step = Math.max(1, Math.floor(pts.length / 80));
   return {
-    id: a.id,
+    id: a.id_str || String(a.id),   // Strava moves ids to 64-bit after 2027-06-01; id_str is lossless
     name: a.name,
     type: a.sport_type || a.type,
     date: fmtDate(a.start_date_local),
