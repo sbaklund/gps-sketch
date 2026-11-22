@@ -56,7 +56,7 @@
   /* ---------- print file ----------
      The poster SVG is drawn onto a big canvas and saved as one JPEG. An SVG used as a
      picture can't see the page's web fonts, so the fonts it uses are copied INTO it first. */
-  const PRINT_SIZES = [[3600, 4800], [3000, 4000]];   // 3:4. Second size is for phones that refuse very large canvases.
+  const PRINT_WIDTHS = [3600, 3000, 2400];   // poster width in px (height = width × 4/3). Smaller ones are for phones that refuse very large canvases.
 
   function inRange(ranges, cp){
     return ranges.some(r => { const m = /^U\+([0-9A-F?]+)(?:-([0-9A-F]+))?$/i.exec(r.trim()); if (!m) return false;
@@ -87,27 +87,37 @@
     if (!faces.length) throw new Error('no fonts matched the poster');
     return svgText.replace(/(<svg\b[^>]*>)/, '$1<style>' + faces.join('\n') + '</style>');
   }
-  function rasterize(svgText, w, h){
+  // pad = extra pixels on every side (canvas wrap). The border is the poster mirrored outwards, so
+  // whatever folds around the edge of the canvas continues the picture instead of cutting into it.
+  function rasterize(svgText, w, h, pad){
     return new Promise((resolve, reject) => {
       const src = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' })), img = new Image();
       const done = () => URL.revokeObjectURL(src);
       img.onerror = () => { done(); reject(new Error('poster could not be drawn')); };
       img.onload = () => {
         try {
-          const c = document.createElement('canvas'); c.width = w; c.height = h;
+          const c = document.createElement('canvas'); c.width = w + 2 * pad; c.height = h + 2 * pad;
           const ctx = c.getContext('2d'); if (!ctx) throw new Error('canvas too large');
-          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+          ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          for (let gx = (pad ? -1 : 0); gx <= (pad ? 1 : 0); gx++) for (let gy = (pad ? -1 : 0); gy <= (pad ? 1 : 0); gy++) {
+            ctx.save();                                   // 3×3 tiles; every tile off-centre is flipped towards the middle one
+            ctx.translate(pad + gx * w + (gx ? w : 0), pad + gy * h + (gy ? h : 0));
+            ctx.scale(gx ? -1 : 1, gy ? -1 : 1);
+            ctx.drawImage(img, 0, 0, w, h);
+            ctx.restore();
+          }
           c.toBlob(b => { done(); (b && b.size > 20000) ? resolve(b) : reject(new Error('canvas too large')); }, 'image/jpeg', 0.92);
         } catch (e) { done(); reject(e); }
       };
       img.src = src;
     });
   }
-  /** Makes the print JPEG from poster SVG text and uploads it. → { id, url, width, height, bytes } */
-  async function makePrintFile(svgText){
+  /** Makes the print JPEG from poster SVG text and uploads it. wrap = extra border per side as a share
+      of the poster's width (canvas), or 0. → { id, url, width, height, bytes } */
+  async function makePrintFile(svgText, wrap){
     const withFonts = await embedFonts(svgText);        // never print with fallback fonts — fail instead
     let blob = null, lastErr = null;
-    for (const [w, h] of PRINT_SIZES) { try { blob = await rasterize(withFonts, w, h); break; } catch (e) { lastErr = e; } }
+    for (const w of PRINT_WIDTHS) { try { blob = await rasterize(withFonts, w, w * 4 / 3, Math.round(w * (wrap || 0))); break; } catch (e) { lastErr = e; } }
     if (!blob) throw lastErr || new Error('could not make the print file');
     const res = await fetch('/api/print/files', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
     const d = await res.json().catch(() => ({}));
@@ -121,7 +131,8 @@
     const btn = $('ppCheckout'), fine = $('ppFine');
     busy = true; btn.disabled = true; btn.textContent = 'Preparing your print file…';
     try {
-      if (!printFile) printFile = await makePrintFile(getSvg());
+      const p = product(), wrap = p.wrap ? p.wrap[Math.max(0, cat.sizes.findIndex(s => s.key === size))] : 0;
+      if (!printFile || printFile.wrap !== wrap) { printFile = await makePrintFile(getSvg(), wrap); printFile.wrap = wrap; }
       btn.textContent = 'Opening secure checkout…';
       const res = await fetch('/api/print/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product: prod, size, trim, fileId: printFile.id }) });

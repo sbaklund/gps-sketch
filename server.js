@@ -134,7 +134,8 @@ if (CANONICAL_HOST) {
 }
 
 app.use(cors(corsOptions));
-app.use(express.json());
+// Stripe's "paid" message is checked against its exact bytes, so keep those for that one route.
+app.use(express.json({ limit: '1mb', verify(req, res, buf) { if (req.originalUrl.startsWith('/api/print/stripe-webhook')) req.rawBody = buf; } }));
 
 // Per-user sessions — each visitor gets their own cookie + Strava token store.
 // On Render's free tier, MemoryStore resets on redeploy (users re-authenticate).
@@ -206,6 +207,8 @@ app.get('/health', (req, res) => {
     stravaConfigured: !!process.env.STRAVA_CLIENT_ID,
     stripeMode:       printShop ? printShop.stripeMode() : 'off',   // 'test' | 'live' | 'off' — never the key
     printEnabled:     process.env.PRINT_ENABLED === '1',
+    gelatoKeySet:     !!process.env.GELATO_API_KEY,
+    stripeWebhookSet: !!process.env.STRIPE_WEBHOOK_SECRET,
     allowedOrigins:   corsOrigins,
     cachedAreas:      cacheSize,
     architecture:     'single-service',

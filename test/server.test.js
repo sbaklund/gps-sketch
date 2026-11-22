@@ -14,7 +14,7 @@ let proc;
 
 test.before(async () => {
   proc = spawn(process.execPath, ['server.js'], { cwd: ROOT, stdio: 'ignore',
-    env: { ...process.env, PORT: String(PORT), STRAVA_CLIENT_ID: 'test-id', STRAVA_CLIENT_SECRET: 'x', STRAVA_MOCK: '', MAPTILER_KEY: '', CANONICAL_HOST: '', RENDER: '', STRIPE_SECRET_KEY: '', PRINT_ENABLED: '' } });
+    env: { ...process.env, PORT: String(PORT), STRAVA_CLIENT_ID: 'test-id', STRAVA_CLIENT_SECRET: 'x', STRAVA_MOCK: '', MAPTILER_KEY: '', CANONICAL_HOST: '', RENDER: '', STRIPE_SECRET_KEY: '', PRINT_ENABLED: '', STRIPE_WEBHOOK_SECRET: '', GELATO_API_KEY: '' } });
   for (let i = 0; i < 50; i++) { try { await fetch(base + '/health'); return; } catch { await new Promise(r => setTimeout(r, 100)); } }
   throw new Error('server did not start');
 });
@@ -98,7 +98,8 @@ test('print files: only a poster-shaped JPEG is accepted, and it comes back from
   const jpeg = (w, h) => Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08, h >> 8, h & 255, w >> 8, w & 255, 3]), Buffer.alloc(40)]);
   assert.deepEqual(jpegSize(jpeg(3600, 4800)), { w: 3600, h: 4800 });
   assert.equal(checkPrintFile(jpeg(3600, 4800)), null);
-  assert.match(checkPrintFile(jpeg(4800, 3600)), /3:4/);
+  assert.match(checkPrintFile(jpeg(4800, 3600)), /poster shape/);
+  assert.equal(checkPrintFile(jpeg(3994, 5194)), null, 'canvas file with its wrap border');
   assert.match(checkPrintFile(jpeg(300, 400)), /wrong size/);
   assert.match(checkPrintFile(Buffer.from('<html>hello</html>')), /Not a JPEG/);
 
@@ -138,7 +139,45 @@ test('checkout: the server sets the price, refuses unknown products, and is off 
   const jpeg = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08, 4000 >> 8, 4000 & 255, 3000 >> 8, 3000 & 255, 3]), Buffer.alloc(40)]);
   const up = await (await fetch(base + '/api/print/files', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg })).json();
   assert.equal((await post({ product: 'paper', size: '18x24', fileId: up.id })).status, 503, 'no Stripe key on the test server');
+  const wrong = await post({ product: 'canvas', size: '18x24', fileId: up.id });
+  assert.equal(wrong.status, 400, 'a plain poster file is refused for canvas');
+  assert.match((await wrong.json()).error, /doesn’t match/);
+  const { fileShape } = require('../routes/print');
+  assert.equal(fileShape('paper', '18x24'), 0.75);
+  assert.ok(Math.abs(fileShape('canvas', '18x24') - 21.94 / 27.94) < 1e-9);
+  const cat = await (await fetch(base + '/api/print/products')).json();
+  assert.deepEqual(cat.products.find(p => p.key === 'canvas').wrap, [0.1642, 0.1094, 0.0821]);
+  assert.equal(cat.products.find(p => p.key === 'paper').wrap, null);
   fs.unlinkSync(path.join(ROOT, 'cache', 'print-files', up.id + '.jpg'));
   assert.equal((await fetch(base + '/api/print/checkout/not-a-session')).status, 400);
   assert.equal((await (await fetch(base + '/health')).json()).stripeMode, 'off');
+});
+
+test('paid → printer: only Stripe-signed messages count, and a test payment becomes a draft order', async () => {
+  const crypto = require('node:crypto');
+  const { verifyStripeSignature, gelatoOrderBody } = require('../routes/print');
+  const body = Buffer.from('{"type":"checkout.session.completed"}'), now = 1800000000000, t = now / 1000;
+  const sig = sec => `t=${t},v1=${crypto.createHmac('sha256', sec).update(t + '.' + body).digest('hex')}`;
+  assert.equal(verifyStripeSignature(body, sig('whsec_good'), 'whsec_good', now), true);
+  assert.equal(verifyStripeSignature(body, sig('whsec_evil'), 'whsec_good', now), false, 'wrong secret');
+  assert.equal(verifyStripeSignature(Buffer.from('{"tampered":1}'), sig('whsec_good'), 'whsec_good', now), false, 'changed body');
+  assert.equal(verifyStripeSignature(body, sig('whsec_good'), 'whsec_good', now + 10 * 60 * 1000), false, 'too old');
+  assert.equal(verifyStripeSignature(body, '', 'whsec_good', now), false);
+
+  const session = { id: 'cs_test_abc', livemode: false, payment_status: 'paid',
+    metadata: { product: 'hanger', size: '12x16', trim: 'black', file_id: 'b'.repeat(32) },
+    customer_details: { email: 'buyer@example.com', name: 'Pat Example' },
+    shipping_details: { name: 'Pat Q Example', address: { line1: '100 Main St', city: 'Denver', state: 'CO', postal_code: '80202', country: 'US' } } };
+  const o = gelatoOrderBody(session, 'https://example.test');
+  assert.equal(o.orderType, 'draft', 'test payments are never printed');
+  assert.equal(o.orderReferenceId, 'cs_test_abc');
+  assert.match(o.items[0].productUid, /^wall_hanging_poster_310-mm_black_/);
+  assert.equal(o.items[0].files[0].url, 'https://example.test/api/print/files/' + 'b'.repeat(32) + '.jpg');
+  assert.deepEqual([o.shippingAddress.firstName, o.shippingAddress.lastName, o.shippingAddress.postCode], ['Pat', 'Q Example', '80202']);
+  assert.equal(gelatoOrderBody({ ...session, livemode: true }, 'https://example.test').orderType, 'draft', 'live but printing not switched on → still a draft');
+  assert.equal(gelatoOrderBody({ ...session, metadata: { product: 'paper', size: 'huge', file_id: 'b'.repeat(32) } }, 'x'), null);
+  assert.equal(gelatoOrderBody({ id: 'cs_test_other', metadata: {} }, 'x'), null, 'someone else\'s checkout is ignored');
+
+  const r = await fetch(base + '/api/print/stripe-webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body });
+  assert.equal(r.status, 503, 'hand-off is off until both keys are set');
 });
