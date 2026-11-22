@@ -127,14 +127,16 @@ function splitRuns(ring, extent, conv) {
   const segEdge = i => out(ring[i]) && out(ring[i + 1]);
   let start = -1;
   for (let i = 0; i < n; i++) if (segEdge(i) !== segEdge((i + n - 1) % n)) { start = i; break; }
-  if (start < 0) return [[segEdge(0) ? 1 : 0, decimate(ring.map(conv), 600)]];
+  if (start < 0) return [[segEdge(0) ? 1 : 0, segEdge(0) ? ring.map(conv) : decimate(ring.map(conv), 600)]];
   const runs = []; let cur = null;
   for (let k = 0; k < n; k++) {
     const i = (start + k) % n, t = segEdge(i) ? 1 : 0;
     if (!cur || cur[0] !== t) { cur = [t, [ring[i]]]; runs.push(cur); }
     cur[1].push(ring[i + 1]);
   }
-  return runs.map(([t, pts]) => [t, decimate(pts.map(conv), Math.max(2, Math.round(600 * pts.length / n)))]);
+  // Thin only real shoreline. Clip-edge runs are a few points and every one is a
+  // tile corner — dropping one cuts a wedge out of the water.
+  return runs.map(([t, pts]) => [t, t ? pts.map(conv) : decimate(pts.map(conv), Math.max(2, Math.round(600 * pts.length / n)))]);
 }
 
 // Decode one tile buffer, appending `water`/`waterway` geometry to polys/lines.
