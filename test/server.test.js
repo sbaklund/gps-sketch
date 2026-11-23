@@ -190,3 +190,13 @@ test('route maps have the drag/zoom camera wired up (page + script)', async () =
   assert.ok(js.includes('function camOn()') && js.includes('function loadRouteFit()'));
   assert.ok(!/if\(!placeMode\|\|!TER\) return;/.test(js), 'pan/zoom must not be limited to searched places');
 });
+
+test('one tool menu for both layouts: the rail buttons, Fine-tune fold, and the desktop rail styles exist', async () => {
+  const html = await (await fetch(base + '/')).text();
+  for (const s of ['route', 'theme', 'type', 'map', 'save']) assert.ok(new RegExp(`class="topo[^"]*" data-sheet="${s}"`).test(html), 'topo ' + s);
+  for (const s of ['routes', 'style', 'edit', 'colors', 'export']) assert.ok(new RegExp(`class="abs[^"]*" data-sheet="${s}"`).test(html), 'abstract ' + s);
+  assert.ok(html.includes('<details class="fine">') && html.indexOf('id="weight"') > html.indexOf('<details class="fine">'), 'line weight sits under Fine-tune');
+  const css = await (await fetch(base + '/css/app.css')).text();
+  assert.ok(/@media \(min-width: 861px\)\{\s*#view-port\{ margin-left:64px; \}/.test(css), 'desktop makes room for the icon rail');
+  assert.ok(css.indexOf('.mob-hide{ display:none !important; }') < css.indexOf('@media (max-width: 860px){\n  body{ height:100dvh'), 'panel switching works at every width');
+});

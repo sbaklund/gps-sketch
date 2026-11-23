@@ -177,19 +177,23 @@
       </div>
       <div class="row" style="margin-top:14px;"><label for="interval">Contour interval</label><span class="val" id="intervalVal">200 ft</span></div>
       <input type="range" id="interval" min="20" max="500" step="10" value="120">
-      <div class="row" style="margin-top:14px;"><label for="weight">Line weight</label><span class="val" id="weightVal">1.0</span></div>
-      <input type="range" id="weight" min="0.3" max="2.5" step="0.1" value="1.0">
       <div class="row" style="margin-top:14px;"><label for="routeWidth">Route width</label><span class="val" id="routeWidthVal">3.4</span></div>
       <input type="range" id="routeWidth" min="1" max="9" step="0.2" value="3.4">
-      <div class="seg" id="routePresets" role="group" aria-label="route width presets" style="margin-top:8px;">
-        <button type="button" data-rw="2">Fine</button>
-        <button type="button" data-rw="3.4">Medium</button>
-        <button type="button" data-rw="6">Bold</button>
-      </div>
       <div class="row" style="margin-top:14px;"><label for="routeZoom">Map zoom</label><span class="val" id="routeZoomVal">35%</span></div>
       <input type="range" id="routeZoom" min="0" max="1" step="0.02" value="0.35">
       <button class="btn" id="resetView" style="display:none; width:100%; margin-top:10px; font-size:11px;" title="Centre the map on your route again">&#8982; Re-centre on route</button>
       <p class="note" style="margin-top:8px;">Drag the map to move it. Scroll or pinch to zoom.</p>
+      <details class="fine">
+        <summary>Fine-tune</summary>
+        <div class="row" style="margin-top:12px;"><label for="weight">Line weight</label><span class="val" id="weightVal">1.0</span></div>
+        <input type="range" id="weight" min="0.3" max="2.5" step="0.1" value="1.0">
+        <div class="row" style="margin-top:14px;"><label>Route width presets</label></div>
+        <div class="seg" id="routePresets" role="group" aria-label="route width presets">
+          <button type="button" data-rw="2">Fine</button>
+          <button type="button" data-rw="3.4">Medium</button>
+          <button type="button" data-rw="6">Bold</button>
+        </div>
+      </details>
     </div>
 
     <div class="group" data-tab="map">
@@ -507,18 +511,18 @@
   </div>
 
   </div><!-- /#view-port -->
-  <!-- ---------- phone layout: bottom bar (shown at 860px and below; see js/mobile.js) ---------- -->
+  <!-- ---------- tool menu buttons: icon rail on desktop, bottom bar on phones (see js/mobile.js) ---------- -->
   <nav id="mobBar" aria-label="Tools">
     <button type="button" class="topo" data-sheet="route" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6a3.5 3.5 0 0 0 0-7h-4a3.5 3.5 0 0 1 0-7h6"/></svg><span>Route</span></button>
     <button type="button" class="topo" data-sheet="theme" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></svg><span>Theme</span></button>
     <button type="button" class="topo" data-sheet="type" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14M12 6v13M9 19h6"/></svg><span>Type</span></button>
     <button type="button" class="topo" data-sheet="map" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5zM3 12.5l9 5 9-5M3 17l9 5 9-5"/></svg><span>Map</span></button>
-    <button type="button" class="topo cta" data-sheet="save" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></button>
+    <button type="button" class="topo cta" data-sheet="save" data-title="Print &amp; save" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></button>
     <button type="button" class="abs" data-sheet="routes" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="6" r="2.2"/><path d="M8 18h6a3.5 3.5 0 0 0 0-7h-4a3.5 3.5 0 0 1 0-7h6"/></svg><span>Routes</span></button>
     <button type="button" class="abs" data-sheet="style" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 14l5-5 4 4 3-3 4 4"/></svg><span>Style</span></button>
-    <button type="button" class="abs" data-sheet="edit" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg><span>Edit</span></button>
+    <button type="button" class="abs" data-sheet="edit" data-title="Edit route" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg><span>Edit</span></button>
     <button type="button" class="abs" data-sheet="colors" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="9" r="4.5"/><circle cx="16" cy="9" r="4.5"/><circle cx="12" cy="15.5" r="4.5"/></svg><span>Colors</span></button>
-    <button type="button" class="abs cta" data-sheet="export" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></button>
+    <button type="button" class="abs cta" data-sheet="export" data-title="Save" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg><span>Save</span></button>
   </nav>
 
   <!-- ---------- print order panel (see js/print.js; hidden until opened) ---------- -->

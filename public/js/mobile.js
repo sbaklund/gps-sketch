@@ -1,16 +1,23 @@
-/* GPX Sketch — phone layout (screens 860px wide and below).
-   The poster/canvas fills the screen. A bottom bar (#mobBar) opens ONE tool
-   panel at a time as a slide-up sheet. Topo's sheet is its sidebar (#rail);
-   Abstract's is its left panel, which also takes the toolbar and colour dock
-   while on a phone (moved back on desktop). Pieces carry data-tab="<name>";
-   everything not on the open tab gets .mob-hide. Desktop is untouched. */
+/* GPX Sketch — the tool menu, for both layouts and both apps.
+   One set of buttons (#mobBar) picks ONE panel at a time:
+     - Desktop (above 860px): the buttons are an icon rail down the left edge and a
+       panel is always open beside it.
+     - Phone (860px and below): the buttons are a bottom bar; the panel is a slide-up
+       sheet that can be closed, so the art fills the screen.
+   The panel is Topo's sidebar (#rail) or Abstract's left panel, which also holds
+   Abstract's old toolbar (#controls-bar). Pieces carry data-tab="<name>"; everything
+   not on the open tab gets .mob-hide. Abstract's colour dock stays along the bottom
+   on desktop and moves into the sheet ("Colors" tab) on phones. */
 (function(){
   'use strict';
   var bar = document.getElementById('mobBar'); if(!bar) return;
   var body = document.body, mq = window.matchMedia('(max-width: 860px)');
   var $ = function(s){ return document.querySelector(s); };
   var rail = $('#rail'), left = $('#left-panel'), main = $('#main-container'),
-      content = $('#content-area'), cbar = $('#controls-bar'), dock = $('#colorDockWrap');
+      cbar = $('#controls-bar'), dock = $('#colorDockWrap'), tabbar = $('#tabbar');
+  var HOME = { topo: 'route', abstract: 'routes' };          // panel shown first on desktop
+  var lastPanel = { topo: HOME.topo, abstract: HOME.abstract };
+  var app = function(){ return body.dataset.app === 'abstract' ? 'abstract' : 'topo'; };
 
   // Abstract's pieces get their tab here (Topo's are tagged in index.html).
   function tag(sel, tab){ document.querySelectorAll(sel).forEach(function(el){ el.dataset.tab = tab; }); }
@@ -20,52 +27,71 @@
   tag('#colorDockWrap', 'colors');
   tag('#controls-bar > .save-group', 'export');
 
-  // A grab handle at the top of each sheet — tap to close.
+  // Top of each panel: a grab handle (phones — tap to close) and a title (desktop).
+  var titles = [];
   var grabs = [rail, left].filter(Boolean).map(function(sheet){
+    var h = document.createElement('h2'); h.className = 'menu-title'; sheet.insertBefore(h, sheet.firstChild); titles.push(h);
     var g = document.createElement('button');
     g.type = 'button'; g.className = 'sheet-grab'; g.setAttribute('aria-label', 'Close panel');
     g.addEventListener('click', function(){ setSheet(null); });
     sheet.insertBefore(g, sheet.firstChild);
     return g;
   });
+  // Abstract's toolbar always lives in its panel now (it used to sit across the top on desktop).
+  if(left && cbar && cbar.parentNode !== left) left.insertBefore(cbar, titles[titles.length - 1].nextSibling);
 
   function setSheet(name){
+    if(!mq.matches && !name) name = lastPanel[app()];                     // desktop always has a panel open
+    if(!mq.matches && name === 'colors') name = 'style';                  // …and its colour dock is always visible
     if(name) body.dataset.sheet = name; else delete body.dataset.sheet;
     document.querySelectorAll('[data-tab]').forEach(function(el){
-      el.classList.toggle('mob-hide', !!name && el.dataset.tab !== name);
+      el.classList.toggle('mob-hide', !!name && el.dataset.tab !== name && !(el === dock && !mq.matches));
     });
     if(cbar) cbar.classList.toggle('mob-hide', !!name && !cbar.querySelector('[data-tab="' + name + '"]'));
-    bar.querySelectorAll('button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.sheet === name)); });
+    var label = '';
+    bar.querySelectorAll('button').forEach(function(b){
+      var on = b.dataset.sheet === name && b.classList.contains(app() === 'abstract' ? 'abs' : 'topo');
+      b.setAttribute('aria-pressed', String(on));
+      if(on) label = b.dataset.title || b.textContent.trim();
+    });
+    titles.forEach(function(h){ h.textContent = label; });
+    if(name) lastPanel[app()] = name;
     [rail, left].forEach(function(s){ if(s) s.scrollTop = 0; });
-    // The art area just changed size — let both apps re-fit once the sheet has settled.
+    // The art area may have changed size — let both apps re-fit once things settle.
     setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 320);
   }
   window.__setMobileSheet = setSheet;   // test hook
 
   bar.addEventListener('click', function(e){
     var b = e.target.closest('button[data-sheet]'); if(!b) return;
-    setSheet(body.dataset.sheet === b.dataset.sheet ? null : b.dataset.sheet);
+    if(mq.matches) setSheet(body.dataset.sheet === b.dataset.sheet ? null : b.dataset.sheet);   // phone: tap again to close
+    else setSheet(b.dataset.sheet);
   });
 
-  // Abstract: toolbar + colour dock live inside the sheet on phones, and go home on desktop.
+  // Colour dock: inside the sheet on phones, along the bottom of the app on desktop.
   function arrange(){
-    if(!left || !main || !cbar || !dock) return;
-    if(mq.matches){
-      if(cbar.parentNode !== left){ left.insertBefore(cbar, grabs[grabs.length - 1].nextSibling); left.appendChild(dock); }
-    } else {
-      if(cbar.parentNode !== main){ main.insertBefore(cbar, content); main.appendChild(dock); }
-      if(body.dataset.sheet) setSheet(null);
+    if(tabbar) document.documentElement.style.setProperty('--tabbar-h', tabbar.offsetHeight + 'px');
+    if(left && main && dock){
+      if(mq.matches){ if(dock.parentNode !== left) left.appendChild(dock); }
+      else if(dock.parentNode !== main) main.appendChild(dock);
     }
+    setSheet(mq.matches ? null : lastPanel[app()]);
   }
   if(mq.addEventListener) mq.addEventListener('change', arrange); else mq.addListener(arrange);
+  window.addEventListener('resize', function(){ if(tabbar) document.documentElement.style.setProperty('--tabbar-h', tabbar.offsetHeight + 'px'); });
   arrange();
 
-  // Tab names differ per app, so close the sheet when the app changes.
   try{
+    // Tab names differ per app: phones close the sheet, desktop shows that app's last panel.
     var lastApp = body.dataset.app;
     new MutationObserver(function(){
-      if(body.dataset.app !== lastApp){ lastApp = body.dataset.app; if(body.dataset.sheet) setSheet(null); }
+      if(body.dataset.app !== lastApp){ lastApp = body.dataset.app; setSheet(mq.matches ? null : lastPanel[app()]); }
     }).observe(body, { attributes:true, attributeFilter:['data-app'] });
+    // Abstract, desktop: picking a shape on the canvas opens Edit (its buttons un-grey when something is selected).
+    var probe = document.getElementById('reflectHButton');
+    if(probe) new MutationObserver(function(){
+      if(!mq.matches && app() === 'abstract' && !probe.disabled && body.dataset.sheet !== 'edit') setSheet('edit');
+    }).observe(probe, { attributes:true, attributeFilter:['disabled'] });
   }catch(e){}
 
   // Touch screens pinch instead of scroll.

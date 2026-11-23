@@ -1479,10 +1479,58 @@
    Art fills the screen; a bottom bar opens one tool panel at a
    time as a slide-up sheet. Nothing here applies on desktop.
    ============================================================ */
-#mobBar, .sheet-grab{ display:none; }
+.sheet-grab, .menu-title{ display:none; }
+.mob-hide{ display:none !important; }
+/* Abstract's toolbar is part of its panel in every layout. */
+#controls-bar{ margin:0; padding:0; border:0; border-radius:0; box-shadow:none; background:none; justify-content:flex-start; flex-shrink:0; }
+#controls-bar .toolbar-divider{ display:none; }
+/* Save: the three file types as plain buttons (no dropdown) */
+.save-group{ width:100%; }
+#saveDropdownButton{ display:none; }
+#saveOptions{ display:flex; position:static; gap:8px; min-width:0; padding:0; border:0; box-shadow:none; background:none; }
+#saveOptions button{ flex:1; text-align:center; padding:12px 8px; border:1px solid var(--line-strong); border-radius:var(--abs-r-pill); background:var(--surface); }
+/* "Fine-tune" fold in Topo's Map panel */
+details.fine{ margin-top:14px; border-top:1px solid var(--card-line); padding-top:10px; }
+details.fine > summary{ cursor:pointer; list-style:none; color:var(--accent); font-weight:600; font-size:12px; display:flex; align-items:center; gap:6px; }
+details.fine > summary::-webkit-details-marker{ display:none; }
+details.fine > summary::after{ content:"›"; font-size:15px; line-height:1; transition:transform .15s; }
+details.fine[open] > summary::after{ transform:rotate(90deg); }
+
+/* ============================================================
+   DESKTOP MENU (above 860px) — icon rail + one panel, same in Topo and Abstract.
+   ============================================================ */
+@media (min-width: 861px){
+  #view-port{ margin-left:64px; }
+  #mobBar{ display:flex; flex-direction:column; gap:2px; position:fixed; left:0; top:var(--tabbar-h, 44px); bottom:0; width:64px; z-index:65;
+    padding:8px 0; background:var(--tabbar); border-right:1px solid var(--tabbar-line); }
+  #mobBar button{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; width:100%; min-height:58px; padding:8px 2px; margin:0;
+    border:0; border-left:3px solid transparent; border-radius:0; background:none; box-shadow:none; cursor:pointer;
+    font-family:var(--body); font-size:10.5px; font-weight:500; letter-spacing:0; text-transform:none; color:var(--text-dim); }
+  #mobBar button svg{ width:22px; height:22px; }
+  #mobBar button:hover{ color:var(--brand-ink); }
+  #mobBar button[aria-pressed="true"]{ color:var(--brand-ink); border-left-color:var(--accent); background:rgba(128,128,128,.13); }
+  body[data-app="topo"] #mobBar .abs, body[data-app="abstract"] #mobBar .topo, #mobBar button[data-sheet="colors"]{ display:none; }
+
+  .menu-title{ display:block; margin:0 0 2px; font:800 20px/1.2 var(--display, "Bricolage Grotesque"), "Bricolage Grotesque", Inter, sans-serif; letter-spacing:-.01em; color:var(--brand-ink); }
+  /* Topo panel: flat sections instead of stacked cards */
+  #rail{ gap:18px; padding-top:18px; }
+  #rail .group{ background:none; border:0; box-shadow:none; padding:0; border-radius:0; }
+  /* Abstract panel: same width and surface as Topo's */
+  #left-panel{ width:var(--sidebar-w); padding:18px 14px 16px; gap:14px; background:var(--rail); border-right:1px solid var(--rail-line); }
+  #left-panel #controls-bar{ flex-direction:column; align-items:stretch; gap:16px; }
+  #left-panel #controls-bar .control-group{ flex-wrap:wrap; gap:8px; }
+  #left-panel #controls-bar .control-group > label{ flex:0 0 100%; }
+  #left-panel #controls-bar .file-input-group, #left-panel #controls-bar .file-input-group label{ width:100%; text-align:center; justify-content:center; }
+  #left-panel #controls-bar #stravaConnectButton, #left-panel #controls-bar #reshuffleButton{ width:100%; justify-content:center; }
+  #left-panel #paletteButton{ flex:1 1 auto; min-width:0; }
+  /* the palette list flies out beside the panel instead of being clipped by it */
+  #paletteDropdown{ position:fixed; left:calc(64px + var(--sidebar-w) + 10px); top:calc(var(--tabbar-h, 44px) + 12px); }
+}
+
+#mobBar{ display:none; }
+@media (min-width: 861px){ #mobBar{ display:flex; } }
 @media (max-width: 860px){
   body{ height:100dvh; min-height:0; }
-  .mob-hide{ display:none !important; }
 
   /* top bar: name on the left, app switch on the right */
   #tabbar{ align-items:center; padding:8px 12px; gap:6px; }
@@ -1537,15 +1585,8 @@
   /* Abstract: canvas on top, toolbar + panels + colour dock inside the sheet */
   #content-area{ flex-direction:column; }
   #canvas-wrapper{ order:0; flex:1 1 0; padding:8px; }
-  #controls-bar{ margin:0; padding:0; border:0; border-radius:0; box-shadow:none; background:none; justify-content:flex-start; flex-shrink:0; }
-  #controls-bar .toolbar-divider{ display:none; }
   #colorDockWrap{ border:1px solid var(--line); border-radius:var(--abs-r-lg); overflow:hidden; }
   #colorDockBar .cd-hint, #dockWatermark{ display:none; }
-  /* Save tab: show the three file types as plain buttons (no dropdown) */
-  .save-group{ width:100%; }
-  #saveDropdownButton{ display:none; }
-  #saveOptions{ display:flex; position:static; gap:8px; min-width:0; padding:0; border:0; box-shadow:none; background:none; }
-  #saveOptions button{ flex:1; text-align:center; padding:12px 8px; border:1px solid var(--line-strong); border-radius:var(--abs-r-pill); background:var(--surface); }
 }
 
 /* ======================================================================
