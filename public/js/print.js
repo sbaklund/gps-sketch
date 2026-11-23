@@ -126,7 +126,7 @@
   /** Makes the print JPEG and uploads it. src is the thing being printed (see `source`); wrap = extra border
       per side as a share of the SHORT edge (canvas), or 0. → { id, url, width, height, bytes } */
   async function makePrintFile(src, wrap){
-    if (typeof src === 'string') src = { svg: () => src };                       // (test hook passes SVG text)
+    if (typeof src === 'string') { const text = src; src = { svg: () => text }; }   // (test hook passes SVG text)
     const withFonts = src.svg ? await embedFonts(src.svg()) : null;              // never print with fallback fonts — fail instead
     let blob = null, lastErr = null;
     for (const short of PRINT_WIDTHS) {
