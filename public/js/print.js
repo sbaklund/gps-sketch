@@ -13,6 +13,9 @@
   const panel = $('printPanel'); if (!panel) return;
   const CONSOLE_IN = 60;                       // the sideboard in the scene is 5 ft wide — everything is drawn to that scale
   let cat = null, prod = 'paper', size = '18x24', trim = null, lastFocus = null;
+  let source = null;        // what is being printed: { node(), svg() } for Topo, { node(), image(longEdge), landscape } for Abstract
+  const sideways = () => !!(source && source.landscape);
+  const sizeLabel = s => sideways() ? `${s.h} × ${s.w} in` : s.label;
 
   // The Print button stays hidden until the server says printing is switched on (or ?print=1 for previewing).
   // ?print=1 switches the preview on for THIS browser and it stays on (so it survives the trip to Stripe and back,
@@ -26,7 +29,7 @@
   fetch('/api/print/products').then(r => r.ok ? r.json() : null).then(d => {
     if (!d || !Array.isArray(d.products)) return;
     cat = d;
-    if (d.enabled || preview) { document.body.dataset.print = '1'; const e = $('printEntry'); if (e) e.hidden = false; }
+    if (d.enabled || preview) { document.body.dataset.print = '1'; for (const id of ['printEntry', 'printOpenAbs']) { const e = $(id); if (e) e.hidden = false; } }
   }).catch(() => {});
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
@@ -40,7 +43,7 @@
     $('ppProds').innerHTML = cat.products.map(x =>
       `<button type="button" class="pp-prod" data-prod="${esc(x.key)}" aria-pressed="${x.key === p.key}"><b>${esc(x.name)}</b><span>${esc(x.blurb)} · from $${x.prices[0]}</span></button>`).join('');
     $('ppSizes').innerHTML = cat.sizes.map((x, i) =>
-      `<button type="button" class="pp-pill" data-size="${esc(x.key)}" aria-pressed="${i === si}"><b>${esc(x.label)}</b><span>$${p.prices[i]}</span></button>`).join('');
+      `<button type="button" class="pp-pill" data-size="${esc(x.key)}" aria-pressed="${i === si}"><b>${esc(sizeLabel(x))}</b><span>$${p.prices[i]}</span></button>`).join('');
     $('ppTrimRow').hidden = !p.trims.length;
     $('ppTrimLab').textContent = p.key === 'hanger' ? 'Hanger' : 'Frame';
     $('ppTrims').innerHTML = p.trims.map(x =>
@@ -48,16 +51,17 @@
 
     const art = $('ppArt');
     art.dataset.prod = p.key;
-    art.style.setProperty('--tall', s.h); art.style.setProperty('--wide', s.w);
+    const tall = sideways() ? s.w : s.h, wide = sideways() ? s.h : s.w;
+    art.style.setProperty('--tall', tall); art.style.setProperty('--wide', wide); art.style.aspectRatio = wide + ' / ' + tall;
     art.style.setProperty('--trim', t ? t.hex : '#1c1c1c');
 
     const price = p.prices[si];
-    $('ppLine').textContent = `${p.name}${t ? ' (' + t.label.toLowerCase() + ')' : ''}, ${s.label}`;
+    $('ppLine').textContent = `${p.name}${t ? ' (' + t.label.toLowerCase() + ')' : ''}, ${sizeLabel(s)}`;
     $('ppPrice').textContent = '$' + price;
     $('ppShip').textContent = '$' + p.shipping;
     $('ppTotal').textContent = '$' + (price + p.shipping);
     $('ppDays').textContent = p.days;
-    $('ppCap').textContent = `Shown to scale · ${s.label} above a ${CONSOLE_IN / 12} ft sideboard`;
+    $('ppCap').textContent = `Shown to scale · ${sizeLabel(s)} above a ${CONSOLE_IN / 12} ft sideboard`;
   }
 
   /* ---------- print file ----------
@@ -96,10 +100,10 @@
   }
   // pad = extra pixels on every side (canvas wrap). The border is the poster mirrored outwards, so
   // whatever folds around the edge of the canvas continues the picture instead of cutting into it.
-  function rasterize(svgText, w, h, pad){
+  function rasterize(src, w, h, pad){
     return new Promise((resolve, reject) => {
-      const src = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' })), img = new Image();
-      const done = () => URL.revokeObjectURL(src);
+      const img = new Image();
+      const done = () => { if (src.startsWith('blob:')) URL.revokeObjectURL(src); };
       img.onerror = () => { done(); reject(new Error('poster could not be drawn')); };
       img.onload = () => {
         try {
@@ -119,12 +123,19 @@
       img.src = src;
     });
   }
-  /** Makes the print JPEG from poster SVG text and uploads it. wrap = extra border per side as a share
-      of the poster's width (canvas), or 0. → { id, url, width, height, bytes } */
-  async function makePrintFile(svgText, wrap){
-    const withFonts = await embedFonts(svgText);        // never print with fallback fonts — fail instead
+  /** Makes the print JPEG and uploads it. src is the thing being printed (see `source`); wrap = extra border
+      per side as a share of the SHORT edge (canvas), or 0. → { id, url, width, height, bytes } */
+  async function makePrintFile(src, wrap){
+    if (typeof src === 'string') src = { svg: () => src };                       // (test hook passes SVG text)
+    const withFonts = src.svg ? await embedFonts(src.svg()) : null;              // never print with fallback fonts — fail instead
     let blob = null, lastErr = null;
-    for (const w of PRINT_WIDTHS) { try { blob = await rasterize(withFonts, w, w * 4 / 3, Math.round(w * (wrap || 0))); break; } catch (e) { lastErr = e; } }
+    for (const short of PRINT_WIDTHS) {
+      const long = short * 4 / 3, w = src.landscape ? long : short, h = src.landscape ? short : long;
+      try {
+        const url = withFonts ? URL.createObjectURL(new Blob([withFonts], { type: 'image/svg+xml' })) : await src.image(long);
+        blob = await rasterize(url, w, h, Math.round(short * (wrap || 0))); break;
+      } catch (e) { lastErr = e; }
+    }
     if (!blob) throw lastErr || new Error('could not make the print file');
     const res = await fetch('/api/print/files', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
     const d = await res.json().catch(() => ({}));
@@ -132,17 +143,17 @@
     return d;
   }
 
-  let getSvg = null, printFile = null, busy = false;
+  let printFile = null, busy = false;
   async function checkout(){
     if (busy) return;
     const btn = $('ppCheckout'), fine = $('ppFine');
     busy = true; btn.disabled = true; btn.textContent = 'Preparing your print file…';
     try {
       const p = product(), wrap = p.wrap ? p.wrap[Math.max(0, cat.sizes.findIndex(s => s.key === size))] : 0;
-      if (!printFile || printFile.wrap !== wrap) { printFile = await makePrintFile(getSvg(), wrap); printFile.wrap = wrap; }
+      if (!printFile || printFile.wrap !== wrap) { printFile = await makePrintFile(source, wrap); printFile.wrap = wrap; }
       btn.textContent = 'Opening secure checkout…';
       const res = await fetch('/api/print/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ product: prod, size, trim, fileId: printFile.id }) });
+        body: JSON.stringify({ product: prod, size, trim, orient: sideways() ? 'hor' : 'ver', fileId: printFile.id }) });
       const d = await res.json().catch(() => ({}));
       if (res.ok && d.url) { location.href = d.url; return; }           // off to Stripe's payment page
       if (res.status === 400 && /print file/i.test(d.error || '')) printFile = null;   // server lost the file — remake it next time
@@ -154,11 +165,12 @@
     } finally { busy = false; btn.disabled = false; btn.textContent = 'Continue to checkout'; }
   }
 
-  function open(getNode, getSvgText){
-    getSvg = getSvgText || null; printFile = null;
-    if (!cat) return;
-    let node = null; try { node = getNode && getNode(); } catch (e) { console.error('[print] could not copy the poster:', e); }
+  function open(src){
+    if (!cat || !src) return;
+    let node = null; try { node = src.node && src.node(); } catch (e) { console.error('[print] could not copy the artwork:', e); }
     if (!node) return;
+    source = src; printFile = null;
+    $('ppTitle').textContent = src.svg ? 'Print your poster' : 'Print your artwork';
     node.removeAttribute('id'); node.removeAttribute('width'); node.removeAttribute('height'); node.removeAttribute('style');
     $('ppArtIn').replaceChildren(node);
     $('ppFine').textContent = 'Secure payment by Stripe. Your design is sent to the printer exactly as shown.';
@@ -177,7 +189,7 @@
   panel.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     if (b.id === 'ppClose') return close();
-    if (b.id === 'ppCheckout') { if (getSvg) checkout(); return; }
+    if (b.id === 'ppCheckout') { if (source) checkout(); return; }
     if (b.dataset.prod) prod = b.dataset.prod; else if (b.dataset.size) size = b.dataset.size; else if (b.dataset.trim) trim = b.dataset.trim; else return;
     draw();
     const again = panel.querySelector(`[data-${b.dataset.prod ? 'prod' : b.dataset.size ? 'size' : 'trim'}="${b.dataset.prod || b.dataset.size || b.dataset.trim}"]`);
@@ -186,12 +198,16 @@
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) close(); });
 
   /* ---------- back from Stripe: ?order=success&session_id=… or ?order=cancelled ---------- */
-  function notice(title, text){
+  function notice(title, text, action){      // action = { label, run } adds a second button
+    const old = $('ppNotice'); if (old) old.remove();
     const box = document.createElement('div'); box.id = 'ppNotice'; box.setAttribute('role', 'status');
     const h = document.createElement('b'); h.textContent = title;
     const p = document.createElement('span'); p.textContent = text;
-    const x = document.createElement('button'); x.type = 'button'; x.textContent = 'OK'; x.onclick = () => box.remove();
-    box.append(h, p, x); document.body.appendChild(box);
+    const row = document.createElement('div'); row.className = 'pp-notice-btns';
+    const x = document.createElement('button'); x.type = 'button'; x.textContent = action ? 'Not now' : 'OK'; x.onclick = () => box.remove();
+    if (action) { x.className = 'quiet'; const go = document.createElement('button'); go.type = 'button'; go.textContent = action.label; go.onclick = () => { box.remove(); action.run(); }; row.append(x, go); }
+    else row.append(x);
+    box.append(h, p, row); document.body.appendChild(box);
     return p;
   }
   (function backFromCheckout(){
@@ -208,9 +224,23 @@
     }).catch(() => { line.textContent = 'We couldn’t confirm the payment just now. Check your email for the receipt.'; });
   })();
 
-  const topoBtn = $('printOpenTopo');
-  for (const b of [topoBtn, $('printOpenTop')])       // sidebar (Print section) and the top bar on desktop
-    if (b) b.addEventListener('click', () => open(window.__topoPosterNode, window.__topoPrintSvg));
+  /* ---------- the Print buttons ---------- */
+  const openTopo = () => open({ node: window.__topoPosterNode, svg: window.__topoPrintSvg });
+  function openAbstract(){
+    const a = window.__absPrint;
+    if (!a || !a.ready()) { notice('Nothing to print yet', 'Add a route to your artwork first.'); return; }
+    const { w, h } = a.shape(), r = w / h;
+    if (Math.abs(r - 4 / 3) > 0.01 && Math.abs(r - 3 / 4) > 0.01) {
+      notice('Prints come in 3 : 4', 'Your canvas is a different shape. Switch it to 3 : 4 (upright or sideways), arrange your artwork, then press Print again.',
+        { label: 'Switch to 3 : 4', run: () => a.makePrintable() });
+      return;
+    }
+    open({ node: a.node, image: a.image, landscape: r > 1 });
+  }
+  const openForApp = () => (document.body.dataset.app === 'abstract' ? openAbstract() : openTopo());
+  { const t = $('printOpenTopo'); if (t) t.addEventListener('click', openTopo); }          // Topo's Save panel
+  { const t = $('printOpenTop'); if (t) t.addEventListener('click', openForApp); }         // top bar (desktop), either app
+  { const t = $('printOpenAbs'); if (t) t.addEventListener('click', openAbstract); }       // Abstract's Save panel
 
   window.__openPrint = open; window.__closePrint = close; window.__makePrintFile = makePrintFile;   // last one: test hook
 })();

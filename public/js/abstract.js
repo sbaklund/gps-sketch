@@ -1215,7 +1215,7 @@
             try {
                 if (d.paletteName) { const p = EXPANDED_PALETTES.find(x => x.name === d.paletteName); if (p) activePalette = p; }
                 bgOverride = d.bgOverride || null;
-                if (d.ratio && d.ratio.w && d.ratio.h) canvasRatio = d.ratio;
+                if (d.ratio && d.ratio.w && d.ratio.h) canvasRatio = d.ratio; if (d.ratio && d.ratio.w && d.ratio.h && ratioSelect) ratioSelect.value = d.ratio.w + ':' + d.ratio.h;   // keep the Canvas menu in step with the restored shape
                 if (typeof d.portrait === 'boolean') isPortrait = d.portrait;
                 if (typeof d.gFillOn === 'boolean') gFillOn = d.gFillOn;
                 if (typeof d.gOutlineOn === 'boolean') gOutlineOn = d.gOutlineOn;
@@ -2569,6 +2569,19 @@
             }
           }
         }
+
+        /* Print panel (js/print.js) asks Abstract for its artwork through these. Prints are 3:4,
+           upright or sideways, so makePrintable() switches the canvas to 4:3 (the flip button turns it). */
+        window.__absPrint = {
+            ready: () => !!fabricCanvas && fabricCanvas.getObjects().length > 0,
+            shape: () => ({ w: fabricCanvas.width, h: fabricCanvas.height }),
+            node: () => { fabricCanvas.discardActiveObject(); fabricCanvas.renderAll();
+                const img = new Image(); img.alt = 'Your artwork';
+                img.src = fabricCanvas.toDataURL({ format: 'jpeg', quality: 0.92, multiplier: 1 }); return img; },
+            image: (longEdge) => { fabricCanvas.discardActiveObject(); fabricCanvas.renderAll();
+                return fabricCanvas.toDataURL({ format: 'png', multiplier: longEdge / Math.max(fabricCanvas.width, fabricCanvas.height) }); },
+            makePrintable: () => { ratioSelect.value = '4:3'; ratioSelect.dispatchEvent(new Event('change')); }
+        };
 
         function saveCanvas(format = 'jpeg') {
             if (!fabricCanvas || fabricCanvas.getObjects().length === 0) {

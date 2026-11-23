@@ -99,7 +99,9 @@ test('print files: only a poster-shaped JPEG is accepted, and it comes back from
   const jpeg = (w, h) => Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xC0, 0x00, 0x11, 0x08, h >> 8, h & 255, w >> 8, w & 255, 3]), Buffer.alloc(40)]);
   assert.deepEqual(jpegSize(jpeg(3600, 4800)), { w: 3600, h: 4800 });
   assert.equal(checkPrintFile(jpeg(3600, 4800)), null);
-  assert.match(checkPrintFile(jpeg(4800, 3600)), /poster shape/);
+  assert.equal(checkPrintFile(jpeg(4800, 3600)), null, 'sideways poster');
+  assert.match(checkPrintFile(jpeg(4000, 4000)), /poster shape/);
+  assert.match(checkPrintFile(jpeg(7600, 5700)), /wrong size/);
   assert.equal(checkPrintFile(jpeg(3994, 5194)), null, 'canvas file with its wrap border');
   assert.match(checkPrintFile(jpeg(300, 400)), /wrong size/);
   assert.match(checkPrintFile(Buffer.from('<html>hello</html>')), /Not a JPEG/);
@@ -199,4 +201,20 @@ test('one tool menu for both layouts: the rail buttons, Fine-tune fold, and the 
   const css = await (await fetch(base + '/css/app.css')).text();
   assert.ok(/@media \(min-width: 861px\)\{\s*#view-port\{ margin-left:64px; \}/.test(css), 'desktop makes room for the icon rail');
   assert.ok(css.indexOf('.mob-hide{ display:none !important; }') < css.indexOf('@media (max-width: 860px){\n  body{ height:100dvh'), 'panel switching works at every width');
+});
+
+test('sideways (landscape) orders: right product, right label, right file shape', async () => {
+  const { lookup, fileShape, gelatoOrderBody } = require('../routes/print');
+  const hor = lookup('hanger', '18x24', 'black', 'hor');
+  assert.equal(hor.size, '24 × 18 in');
+  assert.match(hor.gelatoUid, /^wall_hanging_poster_635-mm_black_.*_hor$/);
+  assert.match(lookup('canvas', '12x16', null, 'hor').gelatoUid, /_hor$/);
+  assert.match(lookup('canvas', '12x16', null).gelatoUid, /_ver$/, 'upright unless asked');
+  assert.match(lookup('wood', '12x16', null, 'sideways-ish').gelatoUid, /_ver$/, 'junk orientation counts as upright');
+  assert.equal(fileShape('paper', '18x24', 'hor'), 4 / 3);
+  assert.ok(Math.abs(fileShape('canvas', '18x24', 'hor') - 27.94 / 21.94) < 1e-9);
+  const o = gelatoOrderBody({ id: 'cs_test_h', livemode: false, metadata: { product: 'framed', size: '12x16', trim: 'white', orient: 'hor', file_id: 'c'.repeat(32) } }, 'https://example.test');
+  assert.match(o.items[0].productUid, /^framed_poster_12x16-inch-300x400-mm_white_.*_hor$/);
+  const html = await (await fetch(base + '/')).text();
+  assert.ok(html.includes('<option value="4:3">') && html.includes('id="printOpenAbs" hidden'), 'Abstract has a printable canvas shape and a Print button');
 });

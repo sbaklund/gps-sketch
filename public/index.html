@@ -313,6 +313,7 @@
                 <label for="ratioSelect">Canvas</label>
                 <select id="ratioSelect" title="Canvas aspect ratio">
                     <option value="16:9">16 : 9</option>
+                    <option value="4:3">4 : 3&nbsp; (prints)</option>
                     <option value="3:2">3 : 2&nbsp; (4&times;6)</option>
                     <option value="4:5">4 : 5</option>
                     <option value="1:1">1 : 1</option>
@@ -322,6 +323,7 @@
             <div class="toolbar-divider"></div>
             <button id="reshuffleButton" disabled title="Load routes to start">&#8635; Reshuffle</button>
             <div class="save-group">
+                <button id="printOpenAbs" hidden>Print this artwork</button>
                 <button id="saveDropdownButton">Export As&hellip;</button>
                 <div id="saveOptions" class="dropdown-content">
                     <button id="saveJpgButton">.JPG</button>

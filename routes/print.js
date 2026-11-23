@@ -21,9 +21,10 @@ const router = express.Router();
 
 // Poster is 3:4. Gelato's size keys, one per size we sell.
 const SIZES = [
-  { key: '12x16', label: '12 × 16 in', w: 12, h: 16, gelato: '12x16-inch-300x400-mm', hanger: '310-mm' },
-  { key: '18x24', label: '18 × 24 in', w: 18, h: 24, gelato: '18x24-inch-450x600-mm', hanger: '450-mm' },
-  { key: '24x32', label: '24 × 32 in', w: 24, h: 32, gelato: '24x32-inch-600x800-mm', hanger: '635-mm' },
+  // hanger = rail length for an upright print, hangerHor = for a sideways (landscape) one
+  { key: '12x16', label: '12 × 16 in', w: 12, h: 16, gelato: '12x16-inch-300x400-mm', hanger: '310-mm', hangerHor: '410-mm' },
+  { key: '18x24', label: '18 × 24 in', w: 18, h: 24, gelato: '18x24-inch-450x600-mm', hanger: '450-mm', hangerHor: '635-mm' },
+  { key: '24x32', label: '24 × 32 in', w: 24, h: 32, gelato: '24x32-inch-600x800-mm', hanger: '635-mm', hangerHor: '810-mm' },
 ];
 const PAPER = '250-gsm-100lb-uncoated-offwhite-archival';
 const TRIMS = {
@@ -39,33 +40,36 @@ const TRIMS = {
 // Selling prices in whole US dollars, by size (12x16, 18x24, 24x32). Shipping is a flat rate per product.
 const PRODUCTS = [
   { key: 'paper',  name: 'Paper poster',  blurb: 'Archival matte paper',           prices: [29, 39, 49],   shipping: 6,  days: '5–9',   trims: [],
-    uid: s => `flat_${s.gelato}_${PAPER}_4-0_ver` },
+    uid: (s, t, o) => `flat_${s.gelato}_${PAPER}_4-0_${o}` },
   { key: 'hanger', name: 'Poster + hanger', blurb: 'Wood rails, ready to hang',    prices: [49, 59, 79],   shipping: 8,  days: '12–16', trims: ['natural', 'black', 'white', 'dark'],
-    uid: (s, t) => `wall_hanging_poster_${s.hanger}_${TRIMS[t].gelato}_wood_w14xt20-mm_${s.gelato}_${PAPER}_4-0_ver` },
+    uid: (s, t, o) => `wall_hanging_poster_${o === 'hor' ? s.hangerHor : s.hanger}_${TRIMS[t].gelato}_wood_w14xt20-mm_${s.gelato}_${PAPER}_4-0_${o}` },
   { key: 'canvas', name: 'Canvas',        blurb: 'Stretched, ready to hang',       prices: [69, 89, 119],  shipping: 17, days: '10–11', trims: [], wrapIn: 1.97,
-    uid: s => `canvas_${s.gelato}_canvas_wood-fsc-slim_4-0_ver` },
+    uid: (s, t, o) => `canvas_${s.gelato}_canvas_wood-fsc-slim_4-0_${o}` },
   { key: 'framed', name: 'Framed',        blurb: 'Wood frame, ready to hang',      prices: [89, 119, 169], shipping: 25, days: '5–8',   trims: ['black', 'white', 'natural'],
-    uid: (s, t) => `framed_poster_${s.gelato}_${TRIMS[t].gelato}_wood_w12xt22-mm_plexiglass_${s.gelato}_${PAPER}_4-0_ver` },
+    uid: (s, t, o) => `framed_poster_${s.gelato}_${TRIMS[t].gelato}_wood_w12xt22-mm_plexiglass_${s.gelato}_${PAPER}_4-0_${o}` },
   { key: 'wood',   name: 'Wood print',    blurb: 'Printed on birch',               prices: [99, 129, 159], shipping: 27, days: '5–9',   trims: [],
-    uid: s => `wood_${s.gelato}_lined-plywood_10-mm_hor-grain_4-0_ver` },
+    uid: (s, t, o) => `wood_${s.gelato}_lined-plywood_10-mm_hor-grain_4-0_${o}` },
 ];
 
 /** Width ÷ height the print file must have for this product and size. */
-function fileShape(productKey, sizeKey) {
+function fileShape(productKey, sizeKey, orient) {
   const p = PRODUCTS.find(x => x.key === productKey), s = SIZES.find(x => x.key === sizeKey);
   if (!p || !s) return null;
-  const pad = 2 * (p.wrapIn || 0);
-  return (s.w + pad) / (s.h + pad);
+  const pad = 2 * (p.wrapIn || 0), upright = (s.w + pad) / (s.h + pad);
+  return orient === 'hor' ? 1 / upright : upright;
 }
+/** 'hor' (sideways / landscape) or 'ver' (upright) — anything else counts as upright. */
+const orientOf = v => (v === 'hor' ? 'hor' : 'ver');
 
 /** Price + Gelato product id for one choice, or null if the choice isn't something we sell. */
-function lookup(productKey, sizeKey, trimKey) {
+function lookup(productKey, sizeKey, trimKey, orient) {
+  const o = orientOf(orient);
   const p = PRODUCTS.find(x => x.key === productKey);
   const i = SIZES.findIndex(x => x.key === sizeKey);
   if (!p || i < 0) return null;
   if (p.trims.length ? !p.trims.includes(trimKey) : !!trimKey) return null;
-  return { name: p.name, size: SIZES[i].label, price: p.prices[i], shipping: p.shipping, total: p.prices[i] + p.shipping,
-           gelatoUid: p.uid(SIZES[i], trimKey) };
+  return { name: p.name, size: o === 'hor' ? `${SIZES[i].h} × ${SIZES[i].w} in` : SIZES[i].label, orient: o,
+           price: p.prices[i], shipping: p.shipping, total: p.prices[i] + p.shipping, gelatoUid: p.uid(SIZES[i], trimKey, o) };
 }
 
 /** 'test', 'live' or 'off' — from the kind of Stripe key on the server. Never reveals the key. */
@@ -101,7 +105,7 @@ const FILE_DIR   = path.join(__dirname, '..', 'cache', 'print-files');
 const MAX_BYTES  = 25 * 1024 * 1024;          // one file
 const MAX_TOTAL  = 400 * 1024 * 1024;         // whole folder
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-const MIN_WIDTH  = 2400, MAX_WIDTH = 7200;    // px; poster-shaped only
+const MIN_WIDTH  = 2400, MAX_WIDTH = 7200;    // px: shortest side at least MIN, longest at most MAX; poster-shaped only
 const RATE = { max: 12, windowMs: 10 * 60 * 1000 };
 const FILE_RE = /^[0-9a-f]{32}\.jpg$/;
 const hits = new Map();                       // ip → [timestamps]
@@ -128,8 +132,8 @@ function jpegSize(buf) {
 function checkPrintFile(buf) {
   const size = jpegSize(buf);
   if (!size) return 'Not a JPEG image';
-  if (size.w < MIN_WIDTH || size.w > MAX_WIDTH) return 'Image is the wrong size for printing';
-  const shape = size.w / size.h;                       // 3:4 poster, or a little squarer when it carries a canvas wrap
+  if (Math.min(size.w, size.h) < MIN_WIDTH || Math.max(size.w, size.h) > MAX_WIDTH) return 'Image is the wrong size for printing';
+  const shape = Math.min(size.w, size.h) / Math.max(size.w, size.h);   // 3:4 poster (upright or sideways), a little squarer when it carries a canvas wrap
   if (shape < 0.745 || shape > 0.82) return 'Image is not the poster shape';
   return null;
 }
@@ -204,7 +208,7 @@ function stripeSessionParams(order, choice, fileId, base) {
   p.set('success_url', base + '/?order=success&session_id={CHECKOUT_SESSION_ID}');
   p.set('cancel_url', base + '/?order=cancelled');
   // What the printer needs once this is paid (read back by the payment webhook).
-  p.set('metadata[product]', order.product); p.set('metadata[size]', order.size); p.set('metadata[trim]', order.trim || '');
+  p.set('metadata[product]', order.product); p.set('metadata[size]', order.size); p.set('metadata[trim]', order.trim || ''); p.set('metadata[orient]', choice.orient);
   p.set('metadata[file_id]', fileId); p.set('metadata[gelato_uid]', choice.gelatoUid);
   return p;
 }
@@ -222,13 +226,13 @@ async function stripe(pathname, params) {
 
 router.post('/checkout', async (req, res) => {
   const b = req.body || {};
-  const order = { product: String(b.product || ''), size: String(b.size || ''), trim: b.trim ? String(b.trim) : null };
-  const choice = lookup(order.product, order.size, order.trim);
+  const order = { product: String(b.product || ''), size: String(b.size || ''), trim: b.trim ? String(b.trim) : null, orient: orientOf(b.orient) };
+  const choice = lookup(order.product, order.size, order.trim, order.orient);
   if (!choice) return res.status(400).json({ error: 'That product isn’t available' });
   if (!printFileExists(b.fileId)) return res.status(400).json({ error: 'The print file is missing — please try again' });
   // The file must be the right shape for THIS product (a canvas file has a wrap border, the others don't).
   let dims = null; try { dims = jpegSize(fs.readFileSync(printFilePath(b.fileId))); } catch { /* treated as a mismatch below */ }
-  if (!dims || Math.abs(dims.w / dims.h - fileShape(order.product, order.size)) > 0.004) return res.status(400).json({ error: 'The print file doesn’t match this product — please try again' });
+  if (!dims || Math.abs(dims.w / dims.h - fileShape(order.product, order.size, order.orient)) > 0.006) return res.status(400).json({ error: 'The print file doesn’t match this product — please try again' });
   const mode = stripeMode();
   if (mode === 'off') return res.status(503).json({ error: 'Checkout isn’t set up yet' });
   // A live key takes real money: only allowed once printing is officially switched on.
@@ -278,7 +282,7 @@ function verifyStripeSignature(rawBody, header, secret, nowMs = Date.now()) {
 /** The order Gelato expects, from a paid Stripe checkout. Returns null if it isn't one of our print orders. */
 function gelatoOrderBody(session, base) {
   const md = session.metadata || {};
-  const choice = lookup(md.product, md.size, md.trim || null);
+  const choice = lookup(md.product, md.size, md.trim || null, md.orient);
   if (!choice || !/^[0-9a-f]{32}$/.test(md.file_id || '')) return null;
   const ship = session.shipping_details || (session.collected_information && session.collected_information.shipping_details) || {};
   const cust = session.customer_details || {};
